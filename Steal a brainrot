@@ -14,6 +14,119 @@ local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
 local RootPart = Character:WaitForChild("HumanoidRootPart")
 
+-- Função para atualizar referências do personagem
+local function UpdateCharacterReferences()
+    Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    if Character then
+        Humanoid = Character:WaitForChild("Humanoid")
+        RootPart = Character:WaitForChild("HumanoidRootPart")
+    end
+end
+
+-- Função para limpar sistemas ativos
+local function CleanupActiveSystems()
+    -- Parar flutuação
+    if FloatConnection then
+        FloatConnection:Disconnect()
+        FloatConnection = nil
+    end
+    
+    -- Parar movimento da cadeira
+    for i, connection in pairs(MovementConnections) do
+        if connection then
+            connection:Disconnect()
+        end
+    end
+    MovementConnections = {}
+    
+    -- Parar NoClip
+    if NoClipConnection then
+        NoClipConnection:Disconnect()
+        NoClipConnection = nil
+    end
+    
+    -- Remover objetos do workspace
+    if ChairBlock then
+        ChairBlock:Destroy()
+        ChairBlock = nil
+    end
+    
+    if NoClipBlock then
+        NoClipBlock:Destroy()
+        NoClipBlock = nil
+    end
+    
+    -- Reset de estados
+    FloatEnabled = false
+    ChairSystemEnabled = false
+    NoClipEnabled = false
+    ChairHeight = 0
+end
+
+-- Função para reativar sistemas após respawn
+local function ReactivateSystemsAfterRespawn()
+    wait(1) -- Aguardar estabilização do personagem
+    
+    -- Reativar flutuação se estava ativo
+    if FloatButton and FloatButton.Parent then
+        local currentText = FloatButton.TextButton.Text
+        if currentText == "Desativar Float" then
+            FloatEnabled = false
+            ToggleFloat()
+        end
+    end
+    
+    -- Reativar cadeira se estava ativa
+    if ChairButton and ChairButton.Parent then
+        local currentText = ChairButton.TextButton.Text
+        if currentText == "Desativar Cadeira" then
+            ChairSystemEnabled = false
+            ToggleChairSystem()
+        end
+    end
+    
+    -- Reativar NoClip se estava ativo
+    if NoClipEnabled then
+        NoClipEnabled = false
+        ToggleNoClip()
+    end
+end
+
+-- Event para reconectar quando o personagem spawnar
+LocalPlayer.CharacterAdded:Connect(function(newCharacter)
+    -- Limpar sistemas ativos do personagem anterior
+    CleanupActiveSystems()
+    
+    -- Aguardar carregamento completo do novo personagem
+    newCharacter:WaitForChild("Humanoid")
+    newCharacter:WaitForChild("HumanoidRootPart")
+    
+    -- Atualizar referências
+    UpdateCharacterReferences()
+    
+    -- Notificar respawn
+    game.StarterGui:SetCore("SendNotification", {
+        Title = "Personagem Respawnado";
+        Text = "Sistemas sendo reconectados...";
+        Duration = 3;
+    })
+    
+    -- Reativar sistemas após um delay
+    spawn(ReactivateSystemsAfterRespawn)
+end)
+
+-- Event para detectar morte e limpar sistemas
+if Humanoid then
+    Humanoid.Died:Connect(function()
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "Morte Detectada";
+            Text = "Limpando sistemas ativos...";
+            Duration = 2;
+        })
+        CleanupActiveSystems()
+    end)
+end
+
 -- Estados dos sistemas
 local FloatEnabled = false
 local ChairSystemEnabled = false
@@ -39,6 +152,7 @@ local NoClipBlock = nil
 -- Variáveis para controle de movimento contínuo
 local MovementConnections = {}
 local ChairHeight = 0
+local LastTeleportTime = 0
 
 -- Função para criar barra de carregamento
 local function ShowLoadingBar()
@@ -143,13 +257,18 @@ end
 
 -- Sistema de flutuação
 local function ToggleFloat()
+    if not Character or not RootPart then 
+        UpdateCharacterReferences()
+        if not Character or not RootPart then return end
+    end
+    
     if FloatEnabled then
         FloatEnabled = false
         if FloatConnection then
             FloatConnection:Disconnect()
             FloatConnection = nil
         end
-        if RootPart:FindFirstChild("BodyVelocity") then
+        if RootPart and RootPart:FindFirstChild("BodyVelocity") then
             RootPart.BodyVelocity:Destroy()
         end
         if FloatButton then
@@ -169,13 +288,15 @@ local function ToggleFloat()
         end
         
         FloatConnection = RunService.Heartbeat:Connect(function()
-            if not FloatEnabled then return end
+            if not FloatEnabled or not Character or not RootPart or not Humanoid then return end
             
             local moveVector = Humanoid.MoveDirection
-            if moveVector.Magnitude > 0 then
-                BodyVelocity.Velocity = Vector3.new(moveVector.X * 16, 16.2, moveVector.Z * 16)
-            else
-                BodyVelocity.Velocity = Vector3.new(0, 16.2, 0)
+            if BodyVelocity and BodyVelocity.Parent then
+                if moveVector.Magnitude > 0 then
+                    BodyVelocity.Velocity = Vector3.new(moveVector.X * 16, 16.2, moveVector.Z * 16)
+                else
+                    BodyVelocity.Velocity = Vector3.new(0, 16.2, 0)
+                end
             end
         end)
     end
@@ -420,6 +541,11 @@ local function CreateChairControls()
 end
 
 local function ToggleChairSystem()
+    if not Character or not RootPart then 
+        UpdateCharacterReferences()
+        if not Character or not RootPart then return end
+    end
+    
     if ChairSystemEnabled then
         ChairSystemEnabled = false
         
@@ -480,13 +606,20 @@ local function ToggleChairSystem()
         
         -- Sentar automaticamente
         wait(0.1)
-        Humanoid.Sit = true
-        RootPart.CFrame = CFrame.new(ChairBlock.Position + Vector3.new(0, 2, 0))
+        if Humanoid then
+            Humanoid.Sit = true
+            RootPart.CFrame = CFrame.new(ChairBlock.Position + Vector3.new(0, 2, 0))
+        end
     end
 end
 
 -- Sistema NoClip com proteção de chão
 local function ToggleNoClip()
+    if not Character or not RootPart then 
+        UpdateCharacterReferences()
+        if not Character or not RootPart then return end
+    end
+    
     if NoClipEnabled then
         NoClipEnabled = false
         
@@ -568,24 +701,77 @@ local function ToggleNoClip()
                 
                 -- Verificar se o jogador está muito próximo do bloco (proteção ativada)
                 local distanceToBlock = (playerPos - NoClipBlock.Position).Magnitude
-                if distanceToBlock < 5 then
+                
+                -- Sistema de teleporte quando atravessa o chão
+                if playerPos.Y <= NoClipBlock.Position.Y + 1 then
+                    -- Verificar cooldown para evitar teleportes múltiplos
+                    local currentTime = tick()
+                    if currentTime - LastTeleportTime > 0.5 then -- Cooldown de 0.5 segundos
+                        LastTeleportTime = currentTime
+                        
+                        -- Jogador atravessou o chão, teleportar para cima
+                        local safePosY = NoClipBlock.Position.Y + 5
+                        RootPart.CFrame = CFrame.new(playerPos.X, safePosY, playerPos.Z)
+                        
+                        -- Feedback visual intenso
+                        NoClipBlock.BrickColor = BrickColor.new("Bright yellow")
+                        NoClipBlock.Transparency = 0.2
+                        NoClipBlock.Material = Enum.Material.Neon
+                        
+                        -- Efeito de partícula no teleporte
+                        spawn(function()
+                            local TeleportEffect = Instance.new("Explosion")
+                            TeleportEffect.Parent = workspace
+                            TeleportEffect.Position = Vector3.new(playerPos.X, safePosY, playerPos.Z)
+                            TeleportEffect.BlastRadius = 0
+                            TeleportEffect.BlastPressure = 0
+                            TeleportEffect.Visible = false -- Só o som
+                        end)
+                        
+                        game.StarterGui:SetCore("SendNotification", {
+                            Title = "🚀 Proteção Ativada!";
+                            Text = "Teleportado para segurança!";
+                            Duration = 2;
+                        })
+                        
+                        -- Restaurar visual após delay
+                        spawn(function()
+                            wait(0.3)
+                            if NoClipBlock then
+                                NoClipBlock.Material = Enum.Material.ForceField
+                            end
+                        end)
+                    end
+                elseif distanceToBlock < 5 then
+                    -- Próximo do chão, modo de alerta
                     NoClipBlock.BrickColor = BrickColor.new("Bright red")
-                    NoClipBlock.Transparency = 0.5
+                    NoClipBlock.Transparency = 0.4
                 else
+                    -- Modo normal
                     NoClipBlock.BrickColor = BrickColor.new("Bright green")
                     NoClipBlock.Transparency = 0.7
                 end
+                
+                -- Efeito visual melhorado baseado na proximidade
+                local proximity = math.max(0, 5 - distanceToBlock) / 5
+                NoClipBlock.Size = Vector3.new(4 + proximity, 0.5, 4 + proximity)
             end
         end)
         
         game.StarterGui:SetCore("SendNotification", {
             Title = "NoClip Ativado!";
-            Text = "Atravesse paredes! Bloco protetor criado abaixo de você.";
+            Text = "Atravesse paredes! Proteção com teleporte automático ativa.";
             Duration = 4;
         })
     end
 end
+-- Sistema de salvamento de posição
 local function SavePosition()
+    if not RootPart then 
+        UpdateCharacterReferences()
+        if not RootPart then return end
+    end
+    
     SavedPosition = RootPart.Position
     game.StarterGui:SetCore("SendNotification", {
         Title = "Posição Salva!";
@@ -595,6 +781,11 @@ local function SavePosition()
 end
 
 local function TeleportToSavedPosition()
+    if not RootPart then 
+        UpdateCharacterReferences()
+        if not RootPart then return end
+    end
+    
     if SavedPosition then
         local targetCFrame = CFrame.new(SavedPosition)
         
@@ -609,7 +800,9 @@ local function TeleportToSavedPosition()
         bodyPosition.Parent = RootPart
         
         wait(duration)
-        bodyPosition:Destroy()
+        if bodyPosition and bodyPosition.Parent then
+            bodyPosition:Destroy()
+        end
         
         game.StarterGui:SetCore("SendNotification", {
             Title = "Teleporte Concluído!";
@@ -731,7 +924,7 @@ MainTab:CreateSection("Informações do Sistema")
 
 MainTab:CreateParagraph({
     Title = "Como usar:",
-    Content = "1. Flutuação: Ative o toggle e use o botão que aparece\n2. Cadeira: Ative o toggle, segure os botões para mover, use ▲▼ para altura\n3. NoClip: Atravesse paredes com proteção de chão automática\n4. Posições: Salve e teleporte para posições específicas"
+    Content = "1. Flutuação: Ative o toggle e use o botão que aparece\n2. Cadeira: Ative o toggle, segure os botões para mover, use ▲▼ para altura\n3. NoClip: Atravesse paredes com teleporte automático ao atravessar chão\n4. Posições: Salve e teleporte para posições específicas"
 })
 
 -- Notificação de inicialização
