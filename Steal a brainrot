@@ -18,12 +18,14 @@ local RootPart = Character:WaitForChild("HumanoidRootPart")
 local FloatEnabled = false
 local ChairSystemEnabled = false
 local PositionSystemEnabled = false
+local NoClipEnabled = false
 local SavedPosition = nil
 
 -- Conexões ativas
 local FloatConnection = nil
 local ChairConnection = nil
 local TeleportConnection = nil
+local NoClipConnection = nil
 
 -- Objetos da interface
 local FloatButton = nil
@@ -32,6 +34,7 @@ local SaveButton = nil
 local TeleportButton = nil
 local ChairBlock = nil
 local ChairControlsFrame = nil
+local NoClipBlock = nil
 
 -- Variáveis para controle de movimento contínuo
 local MovementConnections = {}
@@ -482,7 +485,106 @@ local function ToggleChairSystem()
     end
 end
 
--- Sistema de salvamento de posição
+-- Sistema NoClip com proteção de chão
+local function ToggleNoClip()
+    if NoClipEnabled then
+        NoClipEnabled = false
+        
+        -- Restaurar colisão das partes do personagem
+        if Character then
+            for _, part in pairs(Character:GetChildren()) do
+                if part:IsA("BasePart") and part ~= RootPart then
+                    part.CanCollide = true
+                end
+            end
+        end
+        
+        -- Remover bloco protetor e conexão
+        if NoClipBlock then
+            NoClipBlock:Destroy()
+            NoClipBlock = nil
+        end
+        
+        if NoClipConnection then
+            NoClipConnection:Disconnect()
+            NoClipConnection = nil
+        end
+        
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "NoClip Desativado";
+            Text = "Colisão restaurada normalmente.";
+            Duration = 3;
+        })
+    else
+        NoClipEnabled = true
+        
+        -- Criar bloco protetor invisível que segue o jogador
+        NoClipBlock = Instance.new("Part")
+        NoClipBlock.Name = "NoClipFloorProtection"
+        NoClipBlock.Parent = workspace
+        NoClipBlock.Size = Vector3.new(4, 0.5, 4)
+        NoClipBlock.Material = Enum.Material.ForceField
+        NoClipBlock.BrickColor = BrickColor.new("Bright green")
+        NoClipBlock.Transparency = 0.7
+        NoClipBlock.Anchored = true
+        NoClipBlock.CanCollide = true
+        NoClipBlock.Position = RootPart.Position - Vector3.new(0, 4, 0)
+        
+        -- Adicionar efeito visual ao bloco protetor
+        local SelectionBox = Instance.new("SelectionBox")
+        SelectionBox.Parent = NoClipBlock
+        SelectionBox.Adornee = NoClipBlock
+        SelectionBox.Color3 = Color3.fromRGB(0, 255, 0)
+        SelectionBox.LineThickness = 0.2
+        SelectionBox.Transparency = 0.3
+        
+        NoClipConnection = RunService.Heartbeat:Connect(function()
+            if not NoClipEnabled or not Character or not RootPart then return end
+            
+            -- Desativar colisão de todas as partes exceto o HumanoidRootPart
+            for _, part in pairs(Character:GetChildren()) do
+                if part:IsA("BasePart") and part ~= RootPart then
+                    part.CanCollide = false
+                end
+            end
+            
+            -- Manter RootPart sem colisão também (para atravessar paredes)
+            RootPart.CanCollide = false
+            
+            -- Atualizar posição do bloco protetor (sempre abaixo do jogador)
+            if NoClipBlock then
+                local playerPos = RootPart.Position
+                local floorY = playerPos.Y - 4
+                
+                -- Raycast para detectar o chão real
+                local raycast = workspace:Raycast(playerPos, Vector3.new(0, -20, 0))
+                if raycast then
+                    local groundY = raycast.Position.Y
+                    -- Posicionar o bloco protetor um pouco acima do chão real
+                    floorY = math.max(groundY + 0.5, playerPos.Y - 6)
+                end
+                
+                NoClipBlock.Position = Vector3.new(playerPos.X, floorY, playerPos.Z)
+                
+                -- Verificar se o jogador está muito próximo do bloco (proteção ativada)
+                local distanceToBlock = (playerPos - NoClipBlock.Position).Magnitude
+                if distanceToBlock < 5 then
+                    NoClipBlock.BrickColor = BrickColor.new("Bright red")
+                    NoClipBlock.Transparency = 0.5
+                else
+                    NoClipBlock.BrickColor = BrickColor.new("Bright green")
+                    NoClipBlock.Transparency = 0.7
+                end
+            end
+        end)
+        
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "NoClip Ativado!";
+            Text = "Atravesse paredes! Bloco protetor criado abaixo de você.";
+            Duration = 4;
+        })
+    end
+end
 local function SavePosition()
     SavedPosition = RootPart.Position
     game.StarterGui:SetCore("SendNotification", {
@@ -587,6 +689,21 @@ local ChairToggle = MainTab:CreateToggle({
     end
 })
 
+-- Toggle NoClip System
+local NoClipToggle = MainTab:CreateToggle({
+    Name = "Sistema NoClip com Proteção",
+    CurrentValue = false,
+    Flag = "NoClipToggle",
+    Callback = function(Value)
+        if Value then
+            ToggleNoClip()
+        else
+            if NoClipEnabled then
+                ToggleNoClip() -- Desativar se estiver ativo
+            end
+        end
+    end
+})
 -- Toggle Position System
 local PositionToggle = MainTab:CreateToggle({
     Name = "Sistema de Salvamento de Posição",
@@ -614,7 +731,7 @@ MainTab:CreateSection("Informações do Sistema")
 
 MainTab:CreateParagraph({
     Title = "Como usar:",
-    Content = "1. Flutuação: Ative o toggle e use o botão que aparece\n2. Cadeira: Ative o toggle, segure os botões para mover, use ▲▼ para altura\n3. Posições: Salve e teleporte para posições específicas"
+    Content = "1. Flutuação: Ative o toggle e use o botão que aparece\n2. Cadeira: Ative o toggle, segure os botões para mover, use ▲▼ para altura\n3. NoClip: Atravesse paredes com proteção de chão automática\n4. Posições: Salve e teleporte para posições específicas"
 })
 
 -- Notificação de inicialização
@@ -632,5 +749,11 @@ game.Players.PlayerRemoving:Connect(function(player)
         if FloatConnection then FloatConnection:Disconnect() end
         if ChairConnection then ChairConnection:Disconnect() end
         if TeleportConnection then TeleportConnection:Disconnect() end
+        if NoClipConnection then NoClipConnection:Disconnect() end
+        
+        -- Limpar conexões de movimento
+        for i, connection in pairs(MovementConnections) do
+            if connection then connection:Disconnect() end
+        end
     end
 end)
