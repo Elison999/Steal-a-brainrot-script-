@@ -33,6 +33,10 @@ local TeleportButton = nil
 local ChairBlock = nil
 local ChairControlsFrame = nil
 
+-- Variáveis para controle de movimento contínuo
+local MovementConnections = {}
+local ChairHeight = 0
+
 -- Função para criar barra de carregamento
 local function ShowLoadingBar()
     local ScreenGui = Instance.new("ScreenGui")
@@ -174,6 +178,10 @@ local function ToggleFloat()
     end
 end
 
+-- Variáveis para controle de movimento contínuo
+local MovementConnections = {}
+local ChairHeight = 0
+
 -- Sistema de cadeira móvel
 local function CreateChairControls()
     local ScreenGui = Instance.new("ScreenGui")
@@ -186,22 +194,64 @@ local function CreateChairControls()
     Frame.Parent = ScreenGui
     Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     Frame.BackgroundTransparency = 0.2
-    Frame.Position = UDim2.new(0.5, -75, 0.8, -50)
-    Frame.Size = UDim2.new(0, 150, 0, 100)
+    Frame.Position = UDim2.new(0.5, -90, 0.8, -75)
+    Frame.Size = UDim2.new(0, 180, 0, 150)
     Frame.Active = true
     Frame.Draggable = true
     
     Corner.CornerRadius = UDim.new(0, 12)
     Corner.Parent = Frame
     
+    -- Título do controle
+    local Title = Instance.new("TextLabel")
+    Title.Parent = Frame
+    Title.BackgroundTransparency = 1
+    Title.Position = UDim2.new(0, 0, 0, 5)
+    Title.Size = UDim2.new(1, 0, 0, 25)
+    Title.Font = Enum.Font.GothamBold
+    Title.Text = "Controles da Cadeira"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.TextScaled = true
+    
     local buttons = {
-        {text = "↑", pos = UDim2.new(0.5, -20, 0, 5), dir = Vector3.new(0, 0, -1)},
-        {text = "←", pos = UDim2.new(0, 5, 0.5, -15), dir = Vector3.new(-1, 0, 0)},
-        {text = "→", pos = UDim2.new(1, -45, 0.5, -15), dir = Vector3.new(1, 0, 0)},
-        {text = "↓", pos = UDim2.new(0.5, -20, 1, -35), dir = Vector3.new(0, 0, 1)}
+        {text = "↑", pos = UDim2.new(0.5, -20, 0, 35), dir = Vector3.new(0, 0, -1)},
+        {text = "←", pos = UDim2.new(0, 10, 0.5, -15), dir = Vector3.new(-1, 0, 0)},
+        {text = "→", pos = UDim2.new(1, -50, 0.5, -15), dir = Vector3.new(1, 0, 0)},
+        {text = "↓", pos = UDim2.new(0.5, -20, 1, -75), dir = Vector3.new(0, 0, 1)}
     }
     
-    for _, buttonData in pairs(buttons) do
+    -- Função para parar movimento
+    local function StopMovement(buttonId)
+        if MovementConnections[buttonId] then
+            MovementConnections[buttonId]:Disconnect()
+            MovementConnections[buttonId] = nil
+        end
+    end
+    
+    -- Função para iniciar movimento contínuo
+    local function StartMovement(direction, buttonId)
+        StopMovement(buttonId) -- Para qualquer movimento anterior
+        
+        MovementConnections[buttonId] = RunService.Heartbeat:Connect(function()
+            if ChairBlock then
+                local newPosition = ChairBlock.Position + (direction * 0.5) -- Movimento mais suave
+                ChairBlock.Position = newPosition
+                
+                -- Atualizar posição do assento também
+                local seat = ChairBlock:FindFirstChild("Seat")
+                if seat then
+                    seat.Position = newPosition + Vector3.new(0, 0.75 + ChairHeight, 0)
+                end
+                
+                -- Manter jogador na cadeira
+                if Humanoid.Sit then
+                    RootPart.CFrame = CFrame.new(newPosition + Vector3.new(0, 2 + ChairHeight, 0))
+                end
+            end
+        end)
+    end
+    
+    for i, buttonData in pairs(buttons) do
         local Button = Instance.new("TextButton")
         local ButtonCorner = Instance.new("UICorner")
         
@@ -217,22 +267,151 @@ local function CreateChairControls()
         ButtonCorner.CornerRadius = UDim.new(0, 6)
         ButtonCorner.Parent = Button
         
-        Button.MouseButton1Click:Connect(function()
-            if ChairBlock then
-                local newPosition = ChairBlock.Position + (buttonData.dir * 3)
-                ChairBlock.Position = newPosition
-                RootPart.CFrame = CFrame.new(newPosition + Vector3.new(0, 2, 0))
+        -- Evento de pressionar (segurar)
+        Button.MouseButton1Down:Connect(function()
+            Button.BackgroundColor3 = Color3.fromRGB(100, 150, 100)
+            StartMovement(buttonData.dir, i)
+        end)
+        
+        -- Evento de soltar
+        Button.MouseButton1Up:Connect(function()
+            Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            StopMovement(i)
+        end)
+        
+        -- Hover effects
+        Button.MouseEnter:Connect(function()
+            if not MovementConnections[i] then
+                Button.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
             end
         end)
         
-        Button.MouseEnter:Connect(function()
-            Button.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-        end)
-        
         Button.MouseLeave:Connect(function()
-            Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            if not MovementConnections[i] then
+                Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            end
+            StopMovement(i) -- Para o movimento se sair do botão
         end)
     end
+    
+    -- Botões de altura
+    local UpButton = Instance.new("TextButton")
+    local UpCorner = Instance.new("UICorner")
+    local DownButton = Instance.new("TextButton")
+    local DownCorner = Instance.new("UICorner")
+    local HeightLabel = Instance.new("TextLabel")
+    
+    -- Botão para subir
+    UpButton.Parent = Frame
+    UpButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+    UpButton.Position = UDim2.new(0, 10, 1, -40)
+    UpButton.Size = UDim2.new(0, 35, 0, 30)
+    UpButton.Font = Enum.Font.GothamBold
+    UpButton.Text = "▲"
+    UpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    UpButton.TextScaled = true
+    
+    UpCorner.CornerRadius = UDim.new(0, 6)
+    UpCorner.Parent = UpButton
+    
+    -- Botão para descer
+    DownButton.Parent = Frame
+    DownButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+    DownButton.Position = UDim2.new(1, -45, 1, -40)
+    DownButton.Size = UDim2.new(0, 35, 0, 30)
+    DownButton.Font = Enum.Font.GothamBold
+    DownButton.Text = "▼"
+    DownButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    DownButton.TextScaled = true
+    
+    DownCorner.CornerRadius = UDim.new(0, 6)
+    DownCorner.Parent = DownButton
+    
+    -- Label de altura
+    HeightLabel.Parent = Frame
+    HeightLabel.BackgroundTransparency = 1
+    HeightLabel.Position = UDim2.new(0, 50, 1, -40)
+    HeightLabel.Size = UDim2.new(0, 80, 0, 30)
+    HeightLabel.Font = Enum.Font.Gotham
+    HeightLabel.Text = "Altura: 0"
+    HeightLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    HeightLabel.TextScaled = true
+    
+    -- Função para atualizar altura
+    local function UpdateHeight(increment)
+        ChairHeight = ChairHeight + increment
+        ChairHeight = math.max(-2, math.min(10, ChairHeight)) -- Limitar entre -2 e 10
+        
+        HeightLabel.Text = "Altura: " .. math.floor(ChairHeight * 10) / 10
+        
+        if ChairBlock then
+            local seat = ChairBlock:FindFirstChild("Seat")
+            if seat then
+                seat.Position = ChairBlock.Position + Vector3.new(0, 0.75 + ChairHeight, 0)
+            end
+            
+            -- Atualizar posição do jogador se estiver sentado
+            if Humanoid.Sit then
+                RootPart.CFrame = CFrame.new(ChairBlock.Position + Vector3.new(0, 2 + ChairHeight, 0))
+            end
+        end
+    end
+    
+    -- Eventos dos botões de altura (também seguráveis)
+    local heightUpConnection = nil
+    local heightDownConnection = nil
+    
+    -- Subir altura
+    UpButton.MouseButton1Down:Connect(function()
+        UpButton.BackgroundColor3 = Color3.fromRGB(120, 220, 120)
+        UpdateHeight(0.1)
+        
+        heightUpConnection = RunService.Heartbeat:Connect(function()
+            UpdateHeight(0.05) -- Movimento contínuo mais lento
+        end)
+    end)
+    
+    UpButton.MouseButton1Up:Connect(function()
+        UpButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+        if heightUpConnection then
+            heightUpConnection:Disconnect()
+            heightUpConnection = nil
+        end
+    end)
+    
+    UpButton.MouseLeave:Connect(function()
+        UpButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+        if heightUpConnection then
+            heightUpConnection:Disconnect()
+            heightUpConnection = nil
+        end
+    end)
+    
+    -- Descer altura
+    DownButton.MouseButton1Down:Connect(function()
+        DownButton.BackgroundColor3 = Color3.fromRGB(220, 120, 120)
+        UpdateHeight(-0.1)
+        
+        heightDownConnection = RunService.Heartbeat:Connect(function()
+            UpdateHeight(-0.05) -- Movimento contínuo mais lento
+        end)
+    end)
+    
+    DownButton.MouseButton1Up:Connect(function()
+        DownButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+        if heightDownConnection then
+            heightDownConnection:Disconnect()
+            heightDownConnection = nil
+        end
+    end)
+    
+    DownButton.MouseLeave:Connect(function()
+        DownButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+        if heightDownConnection then
+            heightDownConnection:Disconnect()
+            heightDownConnection = nil
+        end
+    end)
     
     return ScreenGui
 end
@@ -240,6 +419,15 @@ end
 local function ToggleChairSystem()
     if ChairSystemEnabled then
         ChairSystemEnabled = false
+        
+        -- Parar todas as conexões de movimento
+        for i, connection in pairs(MovementConnections) do
+            if connection then
+                connection:Disconnect()
+            end
+        end
+        MovementConnections = {}
+        ChairHeight = 0
         
         -- Remover cadeira e controles
         if ChairBlock then
@@ -256,6 +444,7 @@ local function ToggleChairSystem()
         end
     else
         ChairSystemEnabled = true
+        ChairHeight = 0 -- Reset da altura
         
         -- Criar bloco da cadeira
         ChairBlock = Instance.new("Part")
@@ -270,6 +459,7 @@ local function ToggleChairSystem()
         
         -- Sentar no bloco
         local Seat = Instance.new("Seat")
+        Seat.Name = "Seat"
         Seat.Parent = ChairBlock
         Seat.Size = Vector3.new(4, 0.5, 4)
         Seat.Position = ChairBlock.Position + Vector3.new(0, 0.75, 0)
@@ -424,7 +614,7 @@ MainTab:CreateSection("Informações do Sistema")
 
 MainTab:CreateParagraph({
     Title = "Como usar:",
-    Content = "1. Flutuação: Ative o toggle e use o botão que aparece\n2. Cadeira: Ative o toggle para criar uma cadeira controlável\n3. Posições: Salve e teleporte para posições específicas"
+    Content = "1. Flutuação: Ative o toggle e use o botão que aparece\n2. Cadeira: Ative o toggle, segure os botões para mover, use ▲▼ para altura\n3. Posições: Salve e teleporte para posições específicas"
 })
 
 -- Notificação de inicialização
