@@ -1,0 +1,722 @@
+-- Sistema GUI com Bar de Carregamento e Voo
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Variáveis globais
+local floatEnabled = false
+local bodyVelocity = nil
+local bodyPosition = nil
+local floatButton = nil
+local mainGui = nil
+local isGuiOpen = true
+
+-- Variáveis do Bloco Flutuante
+local blockEnabled = false
+local floatingBlock = nil
+local blockButton = nil
+local controlButtons = nil
+local isOnBlock = false
+
+-- Variáveis de Posição Salva
+local teleportEnabled = false
+local savedPosition = nil
+local saveButton = nil
+local teleportButton = nil
+
+-- Função para criar tweens suaves
+local function createTween(object, info, properties)
+    local tween = TweenService:Create(object, info, properties)
+    tween:Play()
+    return tween
+end
+
+-- Bar de carregamento
+local function createLoadingBar()
+    local loadingGui = Instance.new("ScreenGui")
+    loadingGui.Name = "LoadingGui"
+    loadingGui.Parent = playerGui
+    loadingGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    -- Fundo do carregamento
+    local background = Instance.new("Frame")
+    background.Size = UDim2.new(1, 0, 1, 0)
+    background.Position = UDim2.new(0, 0, 0, 0)
+    background.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+    background.BorderSizePixel = 0
+    background.Parent = loadingGui
+    
+    -- Gradiente do fundo
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 20, 35)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 20))
+    }
+    gradient.Rotation = 45
+    gradient.Parent = background
+    
+    -- Título
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(0, 400, 0, 60)
+    title.Position = UDim2.new(0.5, -200, 0.4, -80)
+    title.BackgroundTransparency = 1
+    title.Text = "CARREGANDO SISTEMA"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.Parent = background
+    
+    -- Container da barra
+    local barContainer = Instance.new("Frame")
+    barContainer.Size = UDim2.new(0, 400, 0, 8)
+    barContainer.Position = UDim2.new(0.5, -200, 0.5, 0)
+    barContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    barContainer.BorderSizePixel = 0
+    barContainer.Parent = background
+    
+    -- Cantos arredondados
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 4)
+    corner.Parent = barContainer
+    
+    -- Barra de progresso
+    local progressBar = Instance.new("Frame")
+    progressBar.Size = UDim2.new(0, 0, 1, 0)
+    progressBar.Position = UDim2.new(0, 0, 0, 0)
+    progressBar.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+    progressBar.BorderSizePixel = 0
+    progressBar.Parent = barContainer
+    
+    local progressCorner = Instance.new("UICorner")
+    progressCorner.CornerRadius = UDim.new(0, 4)
+    progressCorner.Parent = progressBar
+    
+    -- Gradiente da barra
+    local barGradient = Instance.new("UIGradient")
+    barGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 150)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 200, 255))
+    }
+    barGradient.Parent = progressBar
+    
+    -- Texto de porcentagem
+    local percentText = Instance.new("TextLabel")
+    percentText.Size = UDim2.new(0, 100, 0, 30)
+    percentText.Position = UDim2.new(0.5, -50, 0.5, 30)
+    percentText.BackgroundTransparency = 1
+    percentText.Text = "0%"
+    percentText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    percentText.TextScaled = true
+    percentText.Font = Enum.Font.Gotham
+    percentText.Parent = background
+    
+    -- Animação de carregamento
+    for i = 0, 100, 2 do
+        wait(0.05)
+        local tween = createTween(progressBar, TweenInfo.new(0.1, Enum.EasingStyle.Quad), {
+            Size = UDim2.new(i/100, 0, 1, 0)
+        })
+        percentText.Text = i .. "%"
+    end
+    
+    wait(0.5)
+    
+    -- Fade out
+    createTween(background, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {
+        BackgroundTransparency = 1
+    })
+    createTween(title, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {
+        TextTransparency = 1
+    })
+    createTween(percentText, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {
+        TextTransparency = 1
+    })
+    
+    wait(0.5)
+    loadingGui:Destroy()
+end
+
+-- Função para criar a GUI principal
+local function createMainGui()
+    mainGui = Instance.new("ScreenGui")
+    mainGui.Name = "MainGui"
+    mainGui.Parent = playerGui
+    mainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    -- Frame principal
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 450, 0, 300)
+    mainFrame.Position = UDim2.new(0.5, -225, 0.5, -150)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = mainGui
+    
+    -- Cantos arredondados
+    local mainCorner = Instance.new("UICorner")
+    mainCorner.CornerRadius = UDim.new(0, 12)
+    mainCorner.Parent = mainFrame
+    
+    -- Sombra
+    local shadow = Instance.new("ImageLabel")
+    shadow.Name = "Shadow"
+    shadow.Size = UDim2.new(1, 20, 1, 20)
+    shadow.Position = UDim2.new(0, -10, 0, -10)
+    shadow.BackgroundTransparency = 1
+    shadow.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+    shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    shadow.ImageTransparency = 0.8
+    shadow.ZIndex = -1
+    shadow.Parent = mainFrame
+    
+    -- Barra superior (para tabs)
+    local topBar = Instance.new("Frame")
+    topBar.Name = "TopBar"
+    topBar.Size = UDim2.new(1, 0, 0, 50)
+    topBar.Position = UDim2.new(0, 0, 0, 0)
+    topBar.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    topBar.BorderSizePixel = 0
+    topBar.Parent = mainFrame
+    
+    local topCorner = Instance.new("UICorner")
+    topCorner.CornerRadius = UDim.new(0, 12)
+    topCorner.Parent = topBar
+    
+    -- Título da GUI
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(0, 200, 1, 0)
+    titleLabel.Position = UDim2.new(0, 15, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "MAIN"
+    titleLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+    titleLabel.TextScaled = true
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = topBar
+    
+    -- Botão de fechar/minimizar
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Size = UDim2.new(0, 40, 0, 30)
+    toggleButton.Position = UDim2.new(1, -50, 0, 10)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+    toggleButton.BorderSizePixel = 0
+    toggleButton.Text = "─"
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.TextScaled = true
+    toggleButton.Font = Enum.Font.GothamBold
+    toggleButton.Parent = topBar
+    
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 6)
+    buttonCorner.Parent = toggleButton
+    
+    -- Conteúdo da GUI
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Name = "ContentFrame"
+    contentFrame.Size = UDim2.new(1, -20, 1, -70)
+    contentFrame.Position = UDim2.new(0, 10, 0, 60)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = mainFrame
+    
+    -- Toggle de flutuação
+    local floatToggle = Instance.new("TextButton")
+    floatToggle.Name = "FloatToggle"
+    floatToggle.Size = UDim2.new(0, 200, 0, 35)
+    floatToggle.Position = UDim2.new(0, 10, 0, 10)
+    floatToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    floatToggle.BorderSizePixel = 0
+    floatToggle.Text = "Flutuação: OFF"
+    floatToggle.TextColor3 = Color3.fromRGB(255, 100, 100)
+    floatToggle.TextScaled = true
+    floatToggle.Font = Enum.Font.Gotham
+    floatToggle.Parent = contentFrame
+    
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 8)
+    toggleCorner.Parent = floatToggle
+    
+    -- Toggle do Bloco Flutuante
+    local blockToggle = Instance.new("TextButton")
+    blockToggle.Name = "BlockToggle"
+    blockToggle.Size = UDim2.new(0, 200, 0, 35)
+    blockToggle.Position = UDim2.new(0, 10, 0, 55)
+    blockToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    blockToggle.BorderSizePixel = 0
+    blockToggle.Text = "Bloco Voador: OFF"
+    blockToggle.TextColor3 = Color3.fromRGB(255, 100, 100)
+    blockToggle.TextScaled = true
+    blockToggle.Font = Enum.Font.Gotham
+    blockToggle.Parent = contentFrame
+    
+    local blockCorner = Instance.new("UICorner")
+    blockCorner.CornerRadius = UDim.new(0, 8)
+    blockCorner.Parent = blockToggle
+    
+    -- Toggle de Teleporte
+    local teleportToggle = Instance.new("TextButton")
+    teleportToggle.Name = "TeleportToggle"
+    teleportToggle.Size = UDim2.new(0, 200, 0, 35)
+    teleportToggle.Position = UDim2.new(0, 10, 0, 100)
+    teleportToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    teleportToggle.BorderSizePixel = 0
+    teleportToggle.Text = "Teleporte: OFF"
+    teleportToggle.TextColor3 = Color3.fromRGB(255, 100, 100)
+    teleportToggle.TextScaled = true
+    teleportToggle.Font = Enum.Font.Gotham
+    teleportToggle.Parent = contentFrame
+    
+    local teleportCorner = Instance.new("UICorner")
+    teleportCorner.CornerRadius = UDim.new(0, 8)
+    teleportCorner.Parent = teleportToggle
+    
+    -- Função do botão de toggle da GUI
+    toggleButton.MouseButton1Click:Connect(function()
+        if isGuiOpen then
+            -- Fechar GUI
+            createTween(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {
+                Size = UDim2.new(0, 0, 0, 0),
+                Position = UDim2.new(0.5, 0, 0.5, 0)
+            })
+            toggleButton.Text = "+"
+            isGuiOpen = false
+        else
+            -- Abrir GUI
+            createTween(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {
+                Size = UDim2.new(0, 450, 0, 300),
+                Position = UDim2.new(0.5, -225, 0.5, -150)
+            })
+            toggleButton.Text = "─"
+            isGuiOpen = true
+        end
+    end)
+    
+    -- Função do toggle de flutuação
+    floatToggle.MouseButton1Click:Connect(function()
+        if not floatEnabled then
+            enableFloat()
+            floatToggle.Text = "Flutuação: ON"
+            floatToggle.TextColor3 = Color3.fromRGB(0, 255, 150)
+            floatToggle.BackgroundColor3 = Color3.fromRGB(0, 100, 50)
+            createFloatButton()
+        else
+            disableFloat()
+            floatToggle.Text = "Flutuação: OFF"
+            floatToggle.TextColor3 = Color3.fromRGB(255, 100, 100)
+            floatToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+            if floatButton then
+                floatButton:Destroy()
+                floatButton = nil
+            end
+        end
+    end)
+    
+    -- Função do toggle do bloco
+    blockToggle.MouseButton1Click:Connect(function()
+        if not blockEnabled then
+            blockEnabled = true
+            blockToggle.Text = "Bloco Voador: ON"
+            blockToggle.TextColor3 = Color3.fromRGB(0, 255, 150)
+            blockToggle.BackgroundColor3 = Color3.fromRGB(0, 100, 50)
+            createBlockButton()
+        else
+            disableBlock()
+            blockToggle.Text = "Bloco Voador: OFF"
+            blockToggle.TextColor3 = Color3.fromRGB(255, 100, 100)
+            blockToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+        end
+    end)
+    
+    -- Função do toggle de teleporte
+    teleportToggle.MouseButton1Click:Connect(function()
+        if not teleportEnabled then
+            teleportEnabled = true
+            teleportToggle.Text = "Teleporte: ON"
+            teleportToggle.TextColor3 = Color3.fromRGB(0, 255, 150)
+            teleportToggle.BackgroundColor3 = Color3.fromRGB(0, 100, 50)
+            createTeleportButtons()
+        else
+            disableTeleport()
+            teleportToggle.Text = "Teleporte: OFF"
+            teleportToggle.TextColor3 = Color3.fromRGB(255, 100, 100)
+            teleportToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+        end
+    end)
+    
+    return mainGui
+end
+
+-- Função para criar botão do bloco flutuante
+function createBlockButton()
+    if blockButton then return end
+    
+    local blockGui = Instance.new("ScreenGui")
+    blockGui.Name = "BlockGui"
+    blockGui.Parent = playerGui
+    blockGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    blockButton = Instance.new("TextButton")
+    blockButton.Size = UDim2.new(0, 80, 0, 80)
+    blockButton.Position = UDim2.new(0, 200, 0, 100)
+    blockButton.BackgroundColor3 = Color3.fromRGB(255, 150, 0)
+    blockButton.BorderSizePixel = 0
+    blockButton.Text = "BLOCO"
+    blockButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    blockButton.TextScaled = true
+    blockButton.Font = Enum.Font.GothamBold
+    blockButton.Parent = blockGui
+    
+    local blockCorner = Instance.new("UICorner")
+    blockCorner.CornerRadius = UDim.new(1, 0)
+    blockCorner.Parent = blockButton
+    
+    -- Sistema de arraste para o botão do bloco
+    makeDraggable(blockButton)
+    
+    -- Função do botão
+    blockButton.MouseButton1Click:Connect(function()
+        if not floatingBlock then
+            createFloatingBlock()
+            blockButton.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+        else
+            destroyFloatingBlock()
+            blockButton.BackgroundColor3 = Color3.fromRGB(255, 150, 0)
+        end
+    end)
+end
+
+-- Função para criar botão flutuante arrastável
+function createFloatButton()
+    if floatButton then return end
+    
+    local floatGui = Instance.new("ScreenGui")
+    floatGui.Name = "FloatGui"
+    floatGui.Parent = playerGui
+    floatGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    floatButton = Instance.new("TextButton")
+    floatButton.Size = UDim2.new(0, 80, 0, 80)
+    floatButton.Position = UDim2.new(0, 100, 0, 100)
+    floatButton.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+    floatButton.BorderSizePixel = 0
+    floatButton.Text = "FLY"
+    floatButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    floatButton.TextScaled = true
+    floatButton.Font = Enum.Font.GothamBold
+    floatButton.Parent = floatGui
+    
+    local floatCorner = Instance.new("UICorner")
+    floatCorner.CornerRadius = UDim.new(1, 0)
+    floatCorner.Parent = floatButton
+    
+    -- Tornar arrastavel
+    makeDraggable(floatButton)
+end
+
+-- Função para criar controles do bloco
+function createBlockControls()
+    if controlButtons then return end
+    
+    local controlGui = Instance.new("ScreenGui")
+    controlGui.Name = "BlockControlGui"
+    controlGui.Parent = playerGui
+    
+    -- Container dos controles
+    local controlFrame = Instance.new("Frame")
+    controlFrame.Size = UDim2.new(0, 200, 0, 200)
+    controlFrame.Position = UDim2.new(0.5, -100, 1, -220)
+    controlFrame.BackgroundTransparency = 1
+    controlFrame.Parent = controlGui
+    
+    controlButtons = controlFrame
+    
+    -- Botão para cima (↑)
+    local upButton = createControlButton("↑", UDim2.new(0, 60, 0, 60), UDim2.new(0.5, -30, 0, 0), controlFrame)
+    upButton.MouseButton1Click:Connect(function()
+        moveBlock(Vector3.new(0, 0, -5))
+    end)
+    
+    -- Botão para esquerda (←)
+    local leftButton = createControlButton("←", UDim2.new(0, 60, 0, 60), UDim2.new(0, 0, 0.5, -30), controlFrame)
+    leftButton.MouseButton1Click:Connect(function()
+        moveBlock(Vector3.new(-5, 0, 0))
+    end)
+    
+    -- Botão para direita (→)
+    local rightButton = createControlButton("→", UDim2.new(0, 60, 0, 60), UDim2.new(1, -60, 0.5, -30), controlFrame)
+    rightButton.MouseButton1Click:Connect(function()
+        moveBlock(Vector3.new(5, 0, 0))
+    end)
+    
+    -- Botão para baixo (↓)
+    local downButton = createControlButton("↓", UDim2.new(0, 60, 0, 60), UDim2.new(0.5, -30, 1, -60), controlFrame)
+    downButton.MouseButton1Click:Connect(function()
+        moveBlock(Vector3.new(0, 0, 5))
+    end)
+end
+
+-- Função auxiliar para criar botões de controle
+function createControlButton(text, size, position, parent)
+    local button = Instance.new("TextButton")
+    button.Size = size
+    button.Position = position
+    button.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+    button.BorderSizePixel = 0
+    button.Text = text
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextScaled = true
+    button.Font = Enum.Font.GothamBold
+    button.Parent = parent
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = button
+    
+    return button
+end
+
+-- Função para mover o bloco
+function moveBlock(direction)
+    if floatingBlock and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local newPosition = floatingBlock.Position + direction
+        floatingBlock.Position = newPosition
+        
+        -- Mover o jogador junto
+        local humanoidRootPart = player.Character.HumanoidRootPart
+        humanoidRootPart.CFrame = CFrame.new(newPosition + Vector3.new(0, 2, 0))
+    end
+end
+
+-- Função para destruir o bloco
+function destroyFloatingBlock()
+    if floatingBlock then
+        floatingBlock:Destroy()
+        floatingBlock = nil
+    end
+    
+    if controlButtons then
+        controlButtons.Parent:Destroy()
+        controlButtons = nil
+    end
+    
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.Sit = false
+    end
+    
+    isOnBlock = false
+end
+
+-- Função para desabilitar sistema do bloco
+function disableBlock()
+    blockEnabled = false
+    destroyFloatingBlock()
+    
+    if blockButton then
+        blockButton.Parent:Destroy()
+        blockButton = nil
+    end
+end
+
+-- Função para criar botões de teleporte
+function createTeleportButtons()
+    if saveButton or teleportButton then return end
+    
+    local teleportGui = Instance.new("ScreenGui")
+    teleportGui.Name = "TeleportGui"
+    teleportGui.Parent = playerGui
+    
+    -- Botão de salvar posição
+    saveButton = Instance.new("TextButton")
+    saveButton.Size = UDim2.new(0, 80, 0, 80)
+    saveButton.Position = UDim2.new(0, 300, 0, 100)
+    saveButton.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
+    saveButton.BorderSizePixel = 0
+    saveButton.Text = "SAVE"
+    saveButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    saveButton.TextScaled = true
+    saveButton.Font = Enum.Font.GothamBold
+    saveButton.Parent = teleportGui
+    
+    local saveCorner = Instance.new("UICorner")
+    saveCorner.CornerRadius = UDim.new(1, 0)
+    saveCorner.Parent = saveButton
+    
+    -- Botão de teleporte
+    teleportButton = Instance.new("TextButton")
+    teleportButton.Size = UDim2.new(0, 80, 0, 80)
+    teleportButton.Position = UDim2.new(0, 400, 0, 100)
+    teleportButton.BackgroundColor3 = Color3.fromRGB(150, 0, 255)
+    teleportButton.BorderSizePixel = 0
+    teleportButton.Text = "TP"
+    teleportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    teleportButton.TextScaled = true
+    teleportButton.Font = Enum.Font.GothamBold
+    teleportButton.Parent = teleportGui
+    
+    local tpCorner = Instance.new("UICorner")
+    tpCorner.CornerRadius = UDim.new(1, 0)
+    tpCorner.Parent = teleportButton
+    
+    -- Tornar arrastaveis
+    makeDraggable(saveButton)
+    makeDraggable(teleportButton)
+    
+    -- Funções dos botões
+    saveButton.MouseButton1Click:Connect(function()
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            savedPosition = player.Character.HumanoidRootPart.Position
+            saveButton.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+            wait(0.2)
+            saveButton.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
+        end
+    end)
+    
+    teleportButton.MouseButton1Click:Connect(function()
+        if savedPosition and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            -- Animação de teleporte suave
+            local humanoidRootPart = player.Character.HumanoidRootPart
+            
+            local bodyPosition = Instance.new("BodyPosition")
+            bodyPosition.MaxForce = Vector3.new(4000, 4000, 4000)
+            bodyPosition.Position = savedPosition
+            bodyPosition.D = 1000
+            bodyPosition.P = 5000
+            bodyPosition.Parent = humanoidRootPart
+            
+            -- Remover após chegar
+            spawn(function()
+                wait(2)
+                if bodyPosition and bodyPosition.Parent then
+                    bodyPosition:Destroy()
+                end
+            end)
+            
+            teleportButton.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+            wait(0.2)
+            teleportButton.BackgroundColor3 = Color3.fromRGB(150, 0, 255)
+        end
+    end)
+end
+
+-- Função para desabilitar teleporte
+function disableTeleport()
+    teleportEnabled = false
+    savedPosition = nil
+    
+    if saveButton then
+        saveButton.Parent:Destroy()
+        saveButton = nil
+    end
+    
+    if teleportButton then
+        teleportButton.Parent:Destroy()
+        teleportButton = nil
+    end
+end
+
+-- Função auxiliar para tornar elementos arrastaveis
+function makeDraggable(element)
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+    
+    element.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = element.Position
+        end
+    end)
+    
+    element.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging then
+                local delta = input.Position - dragStart
+                element.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end
+    end)
+    
+    element.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+end
+
+-- Função para habilitar flutuação
+function enableFloat()
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+        return
+    end
+    
+    floatEnabled = true
+    local character = player.Character
+    local humanoidRootPart = character.HumanoidRootPart
+    local humanoid = character.Humanoid
+    
+    -- BodyVelocity para movimento suave
+    bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyVelocity.Parent = humanoidRootPart
+    
+    -- BodyPosition para manter altura
+    bodyPosition = Instance.new("BodyPosition")
+    bodyPosition.MaxForce = Vector3.new(0, 4000, 0)
+    bodyPosition.Position = humanoidRootPart.Position + Vector3.new(0, 5, 0)
+    bodyPosition.D = 500
+    bodyPosition.P = 3000
+    bodyPosition.Parent = humanoidRootPart
+    
+    -- Controles de movimento
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        if not floatEnabled or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+            connection:Disconnect()
+            return
+        end
+        
+        local humanoidRootPart = player.Character.HumanoidRootPart
+        local camera = workspace.CurrentCamera
+        local moveVector = humanoid.MoveDirection
+        
+        if moveVector.Magnitude > 0 then
+            local cameraDirection = camera.CFrame.LookVector
+            local rightVector = camera.CFrame.RightVector
+            
+            local velocity = (cameraDirection * moveVector.Z + rightVector * moveVector.X) * 50
+            bodyVelocity.Velocity = Vector3.new(velocity.X, 0, velocity.Z)
+        else
+            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        end
+        
+        -- Manter altura baixa (flutuação sutil)
+        bodyPosition.Position = Vector3.new(humanoidRootPart.Position.X, humanoidRootPart.Position.Y, humanoidRootPart.Position.Z)
+    end)
+end
+
+-- Função para desabilitar flutuação
+function disableFloat()
+    floatEnabled = false
+    
+    if bodyVelocity then
+        bodyVelocity:Destroy()
+        bodyVelocity = nil
+    end
+    
+    if bodyPosition then
+        bodyPosition:Destroy()
+        bodyPosition = nil
+    end
+end
+
+-- Inicialização
+spawn(function()
+    createLoadingBar()
+    wait(1)
+    createMainGui()
+end)
