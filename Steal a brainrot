@@ -56,6 +56,21 @@ local function CleanupActiveSystems()
         NoClipBlock = nil
     end
     
+    if GlobalProtectionBlock then
+        GlobalProtectionBlock:Destroy()
+        GlobalProtectionBlock = nil
+    end
+    
+    -- Limpar conexões globais
+    if getgenv().NoClipConnections then
+        for name, connection in pairs(getgenv().NoClipConnections) do
+            if connection then
+                connection:Disconnect()
+            end
+        end
+        getgenv().NoClipConnections = nil
+    end
+    
     -- Reset de estados
     FloatEnabled = false
     ChairSystemEnabled = false
@@ -148,11 +163,16 @@ local TeleportButton = nil
 local ChairBlock = nil
 local ChairControlsFrame = nil
 local NoClipBlock = nil
+local GlobalProtectionBlock = nil
 
 -- Variáveis para controle de movimento contínuo
 local MovementConnections = {}
 local ChairHeight = 0
 local LastTeleportTime = 0
+local LastSafePosition = nil
+local VelocityHistory = {}
+local FloorDetectionHistory = {}
+local EmergencyMode = false
 
 -- Função para criar barra de carregamento
 local function ShowLoadingBar()
@@ -587,7 +607,7 @@ local function ToggleChairSystem()
         ChairBlock.Position = RootPart.Position - Vector3.new(0, 3, 0)
         
         -- Sentar no bloco
-        local Seat = Instance.new("Seat")
+      local Seat = Instance.new("Seat")
         Seat.Name = "Seat"
         Seat.Parent = ChairBlock
         Seat.Size = Vector3.new(4, 0.5, 4)
@@ -638,6 +658,12 @@ local function ToggleNoClip()
             NoClipBlock = nil
         end
         
+        -- Remover bloco de proteção global
+        if GlobalProtectionBlock then
+            GlobalProtectionBlock:Destroy()
+            GlobalProtectionBlock = nil
+        end
+        
         if NoClipConnection then
             NoClipConnection:Disconnect()
             NoClipConnection = nil
@@ -651,7 +677,19 @@ local function ToggleNoClip()
     else
         NoClipEnabled = true
         
-        -- Criar bloco protetor invisível que segue o jogador
+        -- Criar bloco de proteção global gigante e invisível
+        GlobalProtectionBlock = Instance.new("Part")
+        GlobalProtectionBlock.Name = "GlobalFloorProtection"
+        GlobalProtectionBlock.Parent = workspace
+        GlobalProtectionBlock.Size = Vector3.new(10000, 50, 10000) -- Bloco gigante
+        GlobalProtectionBlock.Material = Enum.Material.ForceField
+        GlobalProtectionBlock.BrickColor = BrickColor.new("Bright red")
+        GlobalProtectionBlock.Transparency = 1 -- Completamente invisível
+        GlobalProtectionBlock.Anchored = true
+        GlobalProtectionBlock.CanCollide = false -- Não bloqueia movimento normal
+        GlobalProtectionBlock.Position = Vector3.new(0, -1000, 0) -- Bem abaixo do mapa
+        
+        -- Criar bloco protetor visual que segue o jogador
         NoClipBlock = Instance.new("Part")
         NoClipBlock.Name = "NoClipFloorProtection"
         NoClipBlock.Parent = workspace
@@ -671,6 +709,74 @@ local function ToggleNoClip()
         SelectionBox.LineThickness = 0.2
         SelectionBox.Transparency = 0.3
         
+        -- Sistema de detecção por toque no bloco global
+        local teleportConnection = nil
+        teleportConnection = GlobalProtectionBlock.Touched:Connect(function(hit)
+            if hit.Parent == Character and hit == RootPart then
+                local currentTime = tick()
+                
+                -- Cooldown para evitar teleportes múltiplos
+                if currentTime - LastTeleportTime > 1 then
+                    LastTeleportTime = currentTime
+                    
+                    -- Encontrar posição segura para teleporte
+                    local playerPos = RootPart.Position
+                    local safePosY = -950 -- Posição segura acima do bloco global
+                    
+                    -- Tentar detectar chão real próximo
+                    local raycast = workspace:Raycast(Vector3.new(playerPos.X, 0, playerPos.Z), Vector3.new(0, -500, 0))
+                    if raycast then
+                        safePosY = raycast.Position.Y + 10
+                    end
+                    
+                    -- Teleportar para posição segura
+                    RootPart.CFrame = CFrame.new(playerPos.X, safePosY, playerPos.Z)
+                    
+                    -- Efeito visual dramático
+                    if NoClipBlock then
+                        NoClipBlock.BrickColor = BrickColor.new("Bright yellow")
+                        NoClipBlock.Transparency = 0.1
+                        NoClipBlock.Material = Enum.Material.Neon
+                        NoClipBlock.Size = Vector3.new(10, 2, 10)
+                    end
+                    
+                    -- Efeitos de partícula
+                    spawn(function()
+                        for i = 1, 5 do
+                            local effect = Instance.new("Explosion")
+                            effect.Parent = workspace
+                            effect.Position = Vector3.new(playerPos.X + math.random(-3, 3), safePosY, playerPos.Z + math.random(-3, 3))
+                            effect.BlastRadius = 0
+                            effect.BlastPressure = 0
+                            effect.Visible = false -- Só o som
+                            wait(0.05)
+                        end
+                    end)
+                    
+                    game.StarterGui:SetCore("SendNotification", {
+                        Title = "🚨 PROTEÇÃO GLOBAL ATIVADA!";
+                        Text = "Travessia de chão detectada! Teleportado para segurança.";
+                        Duration = 4;
+                    })
+                    
+                    -- Restaurar visual do bloco após delay
+                    spawn(function()
+                        wait(1)
+                        if NoClipBlock then
+                            NoClipBlock.Material = Enum.Material.ForceField
+                            NoClipBlock.Size = Vector3.new(4, 0.5, 4)
+                        end
+                    end)
+                end
+            end
+        end)
+        
+        -- Armazenar conexão para limpeza posterior
+        if not getgenv().NoClipConnections then
+            getgenv().NoClipConnections = {}
+        end
+        getgenv().NoClipConnections.TouchConnection = teleportConnection
+        
         NoClipConnection = RunService.Heartbeat:Connect(function()
             if not NoClipEnabled or not Character or not RootPart then return end
             
@@ -684,83 +790,292 @@ local function ToggleNoClip()
             -- Manter RootPart sem colisão também (para atravessar paredes)
             RootPart.CanCollide = false
             
-            -- Atualizar posição do bloco protetor (sempre abaixo do jogador)
-            if NoClipBlock then
-                local playerPos = RootPart.Position
-                local floorY = playerPos.Y - 4
-                
-                -- Raycast para detectar o chão real
-                local raycast = workspace:Raycast(playerPos, Vector3.new(0, -20, 0))
+            local playerPos = RootPart.Position
+            local currentTime = tick()
+            
+            -- Sistema de detecção de chão
+            local function DetectFloor()
+                local raycast = workspace:Raycast(playerPos, Vector3.new(0, -30, 0))
                 if raycast then
-                    local groundY = raycast.Position.Y
-                    -- Posicionar o bloco protetor um pouco acima do chão real
-                    floorY = math.max(groundY + 0.5, playerPos.Y - 6)
+                    return raycast.Position.Y
                 end
+                return playerPos.Y - 50
+            end
+            
+            -- Detectar chão
+            local groundY = DetectFloor()
+            
+            -- Histórico de velocidade para efeitos visuais
+            table.insert(VelocityHistory, {
+                position = playerPos,
+                time = currentTime,
+                velocity = RootPart.Velocity
+            })
+            
+            -- Manter apenas últimos 10 frames
+            if #VelocityHistory > 10 then
+                table.remove(VelocityHistory, 1)
+            end
+            
+            -- Calcular velocidade vertical média
+            local avgVerticalVelocity = 0
+            if #VelocityHistory >= 2 then
+                for i = 2, #VelocityHistory do
+                    avgVerticalVelocity = avgVerticalVelocity + VelocityHistory[i].velocity.Y
+                end
+                avgVerticalVelocity = avgVerticalVelocity / (#VelocityHistory - 1)
+            end
+            
+            -- Atualizar posição do bloco protetor
+            if NoClipBlock then
+                local optimalY = math.max(groundY + 1, playerPos.Y - 8)
+                NoClipBlock.Position = Vector3.new(playerPos.X, optimalY, playerPos.Z)
                 
-                NoClipBlock.Position = Vector3.new(playerPos.X, floorY, playerPos.Z)
+                local distanceToGround = playerPos.Y - groundY
+                local distanceToBlock = math.abs(playerPos.Y - NoClipBlock.Position.Y)
                 
-                -- Verificar se o jogador está muito próximo do bloco (proteção ativada)
-                local distanceToBlock = (playerPos - NoClipBlock.Position).Magnitude
+                -- Sistema visual baseado em risco (sem teleporte)
+                local riskLevel = 0
                 
-                -- Sistema de teleporte quando atravessa o chão
-                if playerPos.Y <= NoClipBlock.Position.Y + 1 then
-                    -- Verificar cooldown para evitar teleportes múltiplos
-                    local currentTime = tick()
-                    if currentTime - LastTeleportTime > 0.5 then -- Cooldown de 0.5 segundos
-                        LastTeleportTime = currentTime
-                        
-                        -- Jogador atravessou o chão, teleportar para cima
-                        local safePosY = NoClipBlock.Position.Y + 5
-                        RootPart.CFrame = CFrame.new(playerPos.X, safePosY, playerPos.Z)
-                        
-                        -- Feedback visual intenso
-                        NoClipBlock.BrickColor = BrickColor.new("Bright yellow")
-                        NoClipBlock.Transparency = 0.2
-                        NoClipBlock.Material = Enum.Material.Neon
-                        
-                        -- Efeito de partícula no teleporte
-                        spawn(function()
-                            local TeleportEffect = Instance.new("Explosion")
-                            TeleportEffect.Parent = workspace
-                            TeleportEffect.Position = Vector3.new(playerPos.X, safePosY, playerPos.Z)
-                            TeleportEffect.BlastRadius = 0
-                            TeleportEffect.BlastPressure = 0
-                            TeleportEffect.Visible = false -- Só o som
-                        end)
-                        
-                        game.StarterGui:SetCore("SendNotification", {
-                            Title = "🚀 Proteção Ativada!";
-                            Text = "Teleportado para segurança!";
-                            Duration = 2;
-                        })
-                        
-                        -- Restaurar visual após delay
-                        spawn(function()
-                            wait(0.3)
-                            if NoClipBlock then
-                                NoClipBlock.Material = Enum.Material.ForceField
-                            end
-                        end)
-                    end
-                elseif distanceToBlock < 5 then
-                    -- Próximo do chão, modo de alerta
+                if distanceToGround < 10 then riskLevel = riskLevel + 0.3 end
+                if avgVerticalVelocity < -50 then riskLevel = riskLevel + 0.4 end
+                if distanceToBlock < 3 then riskLevel = riskLevel + 0.3 end
+                
+                -- Cores baseadas no nível de risco
+                if riskLevel > 0.7 then
+                    -- Risco alto: Vermelho piscante
+                    local pulse = math.sin(currentTime * 10) * 0.3 + 0.7
                     NoClipBlock.BrickColor = BrickColor.new("Bright red")
+                    NoClipBlock.Transparency = pulse
+                    NoClipBlock.Size = Vector3.new(5 + pulse, 0.5, 5 + pulse)
+                elseif riskLevel > 0.4 then
+                    -- Risco médio: Laranja
+                    NoClipBlock.BrickColor = BrickColor.new("Neon orange")
                     NoClipBlock.Transparency = 0.4
+                    NoClipBlock.Size = Vector3.new(4.5, 0.5, 4.5)
+                elseif riskLevel > 0.1 then
+                    -- Risco baixo: Amarelo
+                    NoClipBlock.BrickColor = BrickColor.new("Bright yellow")
+                    NoClipBlock.Transparency = 0.6
+                    NoClipBlock.Size = Vector3.new(4.2, 0.5, 4.2)
                 else
-                    -- Modo normal
+                    -- Seguro: Verde
                     NoClipBlock.BrickColor = BrickColor.new("Bright green")
                     NoClipBlock.Transparency = 0.7
+                    NoClipBlock.Size = Vector3.new(4, 0.5, 4)
+                end
+            end
+        end)
+            RootPart.CanCollide = false
+            
+            local playerPos = RootPart.Position
+            local currentTime = tick()
+            
+            -- Sistema inteligente de detecção de chão
+            local function PerformIntelligentFloorDetection()
+                local detectionResults = {}
+                
+                -- Múltiplos raycasts em diferentes direções para máxima precisão
+                local rayDirections = {
+                    Vector3.new(0, -30, 0),      -- Direto para baixo
+                    Vector3.new(2, -30, 0),      -- Diagonal frente-direita
+                    Vector3.new(-2, -30, 0),     -- Diagonal frente-esquerda
+                    Vector3.new(0, -30, 2),      -- Diagonal trás-direita
+                    Vector3.new(0, -30, -2),     -- Diagonal trás-esquerda
+                }
+                
+                for i, direction in ipairs(rayDirections) do
+                    local raycast = workspace:Raycast(playerPos, direction)
+                    if raycast then
+                        table.insert(detectionResults, {
+                            position = raycast.Position,
+                            distance = (playerPos - raycast.Position).Magnitude,
+                            normal = raycast.Normal,
+                            material = raycast.Material
+                        })
+                    end
                 end
                 
-                -- Efeito visual melhorado baseado na proximidade
-                local proximity = math.max(0, 5 - distanceToBlock) / 5
-                NoClipBlock.Size = Vector3.new(4 + proximity, 0.5, 4 + proximity)
+                -- Encontrar o chão mais próximo e confiável
+                if #detectionResults > 0 then
+                    table.sort(detectionResults, function(a, b) return a.distance < b.distance end)
+                    return detectionResults[1]
+                end
+                
+                return nil
+            end
+            
+            -- Detectar chão inteligente
+            local floorData = PerformIntelligentFloorDetection()
+            local groundY = floorData and floorData.position.Y or (playerPos.Y - 50)
+            
+            -- Histórico de velocidade para detectar queda rápida
+            table.insert(VelocityHistory, {
+                position = playerPos,
+                time = currentTime,
+                velocity = RootPart.Velocity
+            })
+            
+            -- Manter apenas últimos 10 frames
+            if #VelocityHistory > 10 then
+                table.remove(VelocityHistory, 1)
+            end
+            
+            -- Calcular velocidade vertical média
+            local avgVerticalVelocity = 0
+            if #VelocityHistory >= 2 then
+                for i = 2, #VelocityHistory do
+                    avgVerticalVelocity = avgVerticalVelocity + VelocityHistory[i].velocity.Y
+                end
+                avgVerticalVelocity = avgVerticalVelocity / (#VelocityHistory - 1)
+            end
+            
+            -- Detectar posição segura
+            if floorData and (playerPos.Y - groundY) > 5 and (playerPos.Y - groundY) < 100 then
+                LastSafePosition = playerPos
+            end
+            
+            -- Atualizar posição do bloco protetor
+            if NoClipBlock then
+                local optimalY = math.max(groundY + 1, playerPos.Y - 8)
+                NoClipBlock.Position = Vector3.new(playerPos.X, optimalY, playerPos.Z)
+                
+                local distanceToGround = playerPos.Y - groundY
+                local distanceToBlock = math.abs(playerPos.Y - NoClipBlock.Position.Y)
+                
+                -- Sistema de detecção inteligente de travessia
+                local shouldTeleport = false
+                local teleportReason = ""
+                
+                -- Critério 1: Atravessou fisicamente o chão
+                if playerPos.Y <= groundY + 0.5 then
+                    shouldTeleport = true
+                    teleportReason = "Atravessou o chão fisicamente"
+                end
+                
+                -- Critério 2: Velocidade descendente muito alta
+                if avgVerticalVelocity < -100 and distanceToGround < 15 then
+                    shouldTeleport = true
+                    teleportReason = "Queda muito rápida detectada"
+                    EmergencyMode = true
+                end
+                
+                -- Critério 3: Posição anômala (muito abaixo do esperado)
+                if distanceToGround > 200 and not floorData then
+                    shouldTeleport = true
+                    teleportReason = "Posição anômala - possível void"
+                    EmergencyMode = true
+                end
+                
+                -- Critério 4: Padrão de movimento suspeito (oscilação através do chão)
+                if #VelocityHistory >= 5 then
+                    local oscillationCount = 0
+                    for i = 2, #VelocityHistory do
+                        if VelocityHistory[i].position.Y < groundY + 2 then
+                            oscillationCount = oscillationCount + 1
+                        end
+                    end
+                    if oscillationCount >= 3 then
+                        shouldTeleport = true
+                        teleportReason = "Padrão de oscilação através do chão"
+                    end
+                end
+                
+                -- Executar teleporte inteligente
+                if shouldTeleport and (currentTime - LastTeleportTime) > 0.3 then
+                    LastTeleportTime = currentTime
+                    
+                    -- Determinar melhor posição de teleporte
+                    local safePosY
+                    if EmergencyMode and LastSafePosition then
+                        -- Modo emergência: voltar para última posição segura
+                        RootPart.CFrame = CFrame.new(LastSafePosition)
+                        safePosY = LastSafePosition.Y
+                        EmergencyMode = false
+                    elseif floorData then
+                        -- Modo normal: teleportar para cima do chão detectado
+                        safePosY = floorData.position.Y + 8
+                        RootPart.CFrame = CFrame.new(playerPos.X, safePosY, playerPos.Z)
+                    else
+                        -- Fallback: subir 15 unidades
+                        safePosY = playerPos.Y + 15
+                        RootPart.CFrame = CFrame.new(playerPos.X, safePosY, playerPos.Z)
+                    end
+                    
+                    -- Limpar histórico de velocidade após teleporte
+                    VelocityHistory = {}
+                    
+                    -- Feedback visual super intenso
+                    NoClipBlock.BrickColor = BrickColor.new("Bright yellow")
+                    NoClipBlock.Transparency = 0.1
+                    NoClipBlock.Material = Enum.Material.Neon
+                    NoClipBlock.Size = Vector3.new(8, 1, 8) -- Aumentar dramaticamente
+                    
+                    -- Efeito de partículas melhorado
+                    spawn(function()
+                        for i = 1, 3 do
+                            local effect = Instance.new("Explosion")
+                            effect.Parent = workspace
+                            effect.Position = Vector3.new(playerPos.X + math.random(-2, 2), safePosY, playerPos.Z + math.random(-2, 2))
+                            effect.BlastRadius = 0
+                            effect.BlastPressure = 0
+                            effect.Visible = false
+                            wait(0.1)
+                        end
+                    end)
+                    
+                    game.StarterGui:SetCore("SendNotification", {
+                        Title = "🛡️ PROTEÇÃO INTELIGENTE!";
+                        Text = teleportReason;
+                        Duration = 3;
+                    })
+                    
+                    -- Restaurar visual do bloco
+                    spawn(function()
+                        wait(0.5)
+                        if NoClipBlock then
+                            NoClipBlock.Material = Enum.Material.ForceField
+                            NoClipBlock.Size = Vector3.new(4, 0.5, 4)
+                        end
+                    end)
+                end
+                
+                -- Sistema visual avançado baseado em risco
+                local riskLevel = 0
+                
+                if distanceToGround < 10 then riskLevel = riskLevel + 0.3 end
+                if avgVerticalVelocity < -50 then riskLevel = riskLevel + 0.4 end
+                if distanceToBlock < 3 then riskLevel = riskLevel + 0.3 end
+                
+                -- Cores baseadas no nível de risco
+                if riskLevel > 0.7 then
+                    -- Risco alto: Vermelho piscante
+                    local pulse = math.sin(currentTime * 10) * 0.3 + 0.7
+                    NoClipBlock.BrickColor = BrickColor.new("Bright red")
+                    NoClipBlock.Transparency = pulse
+                    NoClipBlock.Size = Vector3.new(5 + pulse, 0.5, 5 + pulse)
+                elseif riskLevel > 0.4 then
+ -- Risco médio: Laranja
+                    NoClipBlock.BrickColor = BrickColor.new("Neon orange")
+                    NoClipBlock.Transparency = 0.4
+                    NoClipBlock.Size = Vector3.new(4.5, 0.5, 4.5)
+                elseif riskLevel > 0.1 then
+                    -- Risco baixo: Amarelo
+                    NoClipBlock.BrickColor = BrickColor.new("Bright yellow")
+                    NoClipBlock.Transparency = 0.6
+                    NoClipBlock.Size = Vector3.new(4.2, 0.5, 4.2)
+                else
+                    -- Seguro: Verde
+                    NoClipBlock.BrickColor = BrickColor.new("Bright green")
+                    NoClipBlock.Transparency = 0.7
+                    NoClipBlock.Size = Vector3.new(4, 0.5, 4)
+                end
             end
         end)
         
         game.StarterGui:SetCore("SendNotification", {
             Title = "NoClip Ativado!";
-            Text = "Atravesse paredes! Proteção com teleporte automático ativa.";
+            Text = "Atravesse paredes! Proteção global anti-queda ativada.";
             Duration = 4;
         })
     end
@@ -924,7 +1239,7 @@ MainTab:CreateSection("Informações do Sistema")
 
 MainTab:CreateParagraph({
     Title = "Como usar:",
-    Content = "1. Flutuação: Ative o toggle e use o botão que aparece\n2. Cadeira: Ative o toggle, segure os botões para mover, use ▲▼ para altura\n3. NoClip: Atravesse paredes com teleporte automático ao atravessar chão\n4. Posições: Salve e teleporte para posições específicas"
+    Content = "1. Flutuação: Ative o toggle e use o botão que aparece\n2. Cadeira: Ative o toggle, segure os botões para mover, use ▲▼ para altura\n3. NoClip: Atravesse paredes com proteção global anti-queda\n4. Posições: Salve e teleporte para posições específicas"
 })
 
 -- Notificação de inicialização
