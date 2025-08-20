@@ -1,588 +1,446 @@
--- Script GUI Completo com Loading e Funcionalidades
--- Versão: 1.0
--- Compatível com Mobile e Desktop
+-- Sistema Completo Rayfield com Funcionalidades Avançadas
+-- Carregamento da biblioteca Rayfield
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
+-- Serviços
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local rootPart = character:WaitForChild("HumanoidRootPart")
+-- Variáveis globais
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
 
--- Variáveis Globais
-local mainGui
-local loadingGui
-local isGuiVisible = true
-local floatingEnabled = false
-local platformEnabled = false
-local teleportEnabled = false
-local savedPosition = nil
+-- Estados dos sistemas
+local FloatEnabled = false
+local ChairSystemEnabled = false
+local PositionSystemEnabled = false
+local SavedPosition = nil
 
-local floatingButton
-local platformButton
-local saveButton
-local teleportButton
-local platform
+-- Conexões ativas
+local FloatConnection = nil
+local ChairConnection = nil
+local TeleportConnection = nil
 
--- Cores e Estilos
-local colors = {
-    background = Color3.fromRGB(25, 25, 35),
-    accent = Color3.fromRGB(0, 162, 255),
-    success = Color3.fromRGB(46, 204, 113),
-    danger = Color3.fromRGB(231, 76, 60),
-    text = Color3.fromRGB(255, 255, 255),
-    secondary = Color3.fromRGB(52, 73, 94)
-}
+-- Objetos da interface
+local FloatButton = nil
+local ChairButton = nil
+local SaveButton = nil
+local TeleportButton = nil
+local ChairBlock = nil
+local ChairControlsFrame = nil
 
--- Função para criar gradiente
-local function createGradient(colorStart, colorEnd, rotation)
-    local gradient = Instance.new("UIGradient")
-    gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, colorStart),
-        ColorSequenceKeypoint.new(1, colorEnd)
-    })
-    gradient.Rotation = rotation or 90
-    return gradient
-end
-
--- Função para criar sombra
-local function createShadow(parent)
-    local shadow = Instance.new("ImageLabel")
-    shadow.Name = "Shadow"
-    shadow.Parent = parent
-    shadow.BackgroundTransparency = 1
-    shadow.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
-    shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    shadow.ImageTransparency = 0.8
-    shadow.Position = UDim2.new(0, 2, 0, 2)
-    shadow.Size = UDim2.new(1, 0, 1, 0)
-    shadow.ZIndex = parent.ZIndex - 1
-    return shadow
-end
-
--- Função para animação de tween
-local function tweenObject(object, properties, duration, easingStyle, easingDirection)
-    local tweenInfo = TweenInfo.new(
-        duration or 0.3,
-        easingStyle or Enum.EasingStyle.Quad,
-        easingDirection or Enum.EasingDirection.Out
-    )
-    local tween = TweenService:Create(object, tweenInfo, properties)
+-- Função para criar barra de carregamento
+local function ShowLoadingBar()
+    local ScreenGui = Instance.new("ScreenGui")
+    local Frame = Instance.new("Frame")
+    local LoadingBar = Instance.new("Frame")
+    local Fill = Instance.new("Frame")
+    local LoadingText = Instance.new("TextLabel")
+    local Corner = Instance.new("UICorner")
+    local BarCorner = Instance.new("UICorner")
+    local FillCorner = Instance.new("UICorner")
+    
+    ScreenGui.Name = "LoadingScreen"
+    ScreenGui.Parent = game.CoreGui
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    Frame.Parent = ScreenGui
+    Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    Frame.BackgroundTransparency = 0.1
+    Frame.Position = UDim2.new(0, 0, 0, 0)
+    Frame.Size = UDim2.new(1, 0, 1, 0)
+    
+    Corner.CornerRadius = UDim.new(0, 12)
+    Corner.Parent = Frame
+    
+    LoadingBar.Name = "LoadingBar"
+    LoadingBar.Parent = Frame
+    LoadingBar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    LoadingBar.Position = UDim2.new(0.5, -200, 0.5, -15)
+    LoadingBar.Size = UDim2.new(0, 400, 0, 30)
+    
+    BarCorner.CornerRadius = UDim.new(0, 8)
+    BarCorner.Parent = LoadingBar
+    
+    Fill.Name = "Fill"
+    Fill.Parent = LoadingBar
+    Fill.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+    Fill.Size = UDim2.new(0, 0, 1, 0)
+    
+    FillCorner.CornerRadius = UDim.new(0, 8)
+    FillCorner.Parent = Fill
+    
+    LoadingText.Parent = Frame
+    LoadingText.BackgroundTransparency = 1
+    LoadingText.Position = UDim2.new(0.5, -100, 0.5, -50)
+    LoadingText.Size = UDim2.new(0, 200, 0, 30)
+    LoadingText.Font = Enum.Font.GothamBold
+    LoadingText.Text = "Carregando Sistema..."
+    LoadingText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    LoadingText.TextScaled = true
+    
+    -- Animação da barra
+    local tween = TweenService:Create(Fill, TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 1, 0)})
     tween:Play()
-    return tween
+    
+    tween.Completed:Connect(function()
+        LoadingText.Text = "Sistema Carregado!"
+        wait(0.5)
+        ScreenGui:Destroy()
+    end)
+    
+    wait(2.5)
 end
 
--- Criar Loading Screen
-local function createLoadingScreen()
-    loadingGui = Instance.new("ScreenGui")
-    loadingGui.Name = "LoadingGui"
-    loadingGui.Parent = playerGui
-    loadingGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+-- Função para criar botão flutuante arrastável
+local function CreateDraggableButton(text, color, position, callback)
+    local ScreenGui = Instance.new("ScreenGui")
+    local Button = Instance.new("TextButton")
+    local Corner = Instance.new("UICorner")
     
-    local background = Instance.new("Frame")
-    background.Name = "Background"
-    background.Parent = loadingGui
-    background.BackgroundColor3 = colors.background
-    background.Size = UDim2.new(1, 0, 1, 0)
-    background.ZIndex = 10
+    ScreenGui.Name = text .. "Gui"
+    ScreenGui.Parent = game.CoreGui
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
-    local gradient = createGradient(colors.background, Color3.fromRGB(15, 15, 25))
-    gradient.Parent = background
+    Button.Parent = ScreenGui
+    Button.BackgroundColor3 = color
+    Button.Position = position
+    Button.Size = UDim2.new(0, 120, 0, 40)
+    Button.Font = Enum.Font.GothamBold
+    Button.Text = text
+    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Button.TextScaled = true
+    Button.Active = true
+    Button.Draggable = true
     
-    local loadingFrame = Instance.new("Frame")
-    loadingFrame.Name = "LoadingFrame"
-    loadingFrame.Parent = background
-    loadingFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-    loadingFrame.Position = UDim2.new(0.5, -150, 0.5, -50)
-    loadingFrame.Size = UDim2.new(0, 300, 0, 100)
-    loadingFrame.ZIndex = 11
+    Corner.CornerRadius = UDim.new(0, 8)
+    Corner.Parent = Button
     
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = loadingFrame
+    -- Efeito de hover
+    Button.MouseEnter:Connect(function()
+        TweenService:Create(Button, TweenInfo.new(0.2), {Size = UDim2.new(0, 130, 0, 45)}):Play()
+    end)
     
-    createShadow(loadingFrame)
+    Button.MouseLeave:Connect(function()
+        TweenService:Create(Button, TweenInfo.new(0.2), {Size = UDim2.new(0, 120, 0, 40)}):Play()
+    end)
     
-    local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.Parent = loadingFrame
-    title.BackgroundTransparency = 1
-    title.Position = UDim2.new(0, 0, 0, 10)
-    title.Size = UDim2.new(1, 0, 0, 30)
-    title.Font = Enum.Font.GothamBold
-    title.Text = "Carregando GUI..."
-    title.TextColor3 = colors.text
-    title.TextSize = 18
-    title.ZIndex = 12
+    Button.MouseButton1Click:Connect(callback)
     
-    local progressBack = Instance.new("Frame")
-    progressBack.Name = "ProgressBack"
-    progressBack.Parent = loadingFrame
-    progressBack.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-    progressBack.Position = UDim2.new(0, 20, 0, 50)
-    progressBack.Size = UDim2.new(1, -40, 0, 20)
-    progressBack.ZIndex = 12
-    
-    local progressCorner = Instance.new("UICorner")
-    progressCorner.CornerRadius = UDim.new(0, 10)
-    progressCorner.Parent = progressBack
-    
-    local progressBar = Instance.new("Frame")
-    progressBar.Name = "ProgressBar"
-    progressBar.Parent = progressBack
-    progressBar.BackgroundColor3 = colors.accent
-    progressBar.Size = UDim2.new(0, 0, 1, 0)
-    progressBar.ZIndex = 13
-    
-    local barCorner = Instance.new("UICorner")
-    barCorner.CornerRadius = UDim.new(0, 10)
-    barCorner.Parent = progressBar
-    
-    local barGradient = createGradient(colors.accent, Color3.fromRGB(0, 200, 255))
-    barGradient.Parent = progressBar
-    
-    -- Animação da barra de carregamento
-    for i = 0, 100, 2 do
-        tweenObject(progressBar, {Size = UDim2.new(i/100, 0, 1, 0)}, 0.05)
-        wait(0.05)
-    end
-    
-    wait(0.5)
-    tweenObject(background, {BackgroundTransparency = 1}, 0.5)
-    tweenObject(loadingFrame, {BackgroundTransparency = 1}, 0.5)
-    tweenObject(title, {TextTransparency = 1}, 0.5)
-    tweenObject(progressBack, {BackgroundTransparency = 1}, 0.5)
-    tweenObject(progressBar, {BackgroundTransparency = 1}, 0.5)
-    
-    wait(0.5)
-    loadingGui:Destroy()
+    return ScreenGui
 end
 
--- Criar GUI Principal
-local function createMainGui()
-    mainGui = Instance.new("ScreenGui")
-    mainGui.Name = "MainGui"
-    mainGui.Parent = playerGui
-    mainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    
-    -- Frame Principal
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "MainFrame"
-    mainFrame.Parent = mainGui
-    mainFrame.BackgroundColor3 = colors.background
-    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
-    mainFrame.Size = UDim2.new(0, 400, 0, 300)
-    mainFrame.ZIndex = 1
-    
-    local mainCorner = Instance.new("UICorner")
-    mainCorner.CornerRadius = UDim.new(0, 15)
-    mainCorner.Parent = mainFrame
-    
-    createShadow(mainFrame)
-    
-    local mainGradient = createGradient(colors.background, Color3.fromRGB(20, 20, 30))
-    mainGradient.Parent = mainFrame
-    
-    -- Barra Superior
-    local topBar = Instance.new("Frame")
-    topBar.Name = "TopBar"
-    topBar.Parent = mainFrame
-    topBar.BackgroundColor3 = colors.accent
-    topBar.Size = UDim2.new(1, 0, 0, 40)
-    topBar.ZIndex = 2
-    
-    local topCorner = Instance.new("UICorner")
-    topCorner.CornerRadius = UDim.new(0, 15)
-    topCorner.Parent = topBar
-    
-    local topGradient = createGradient(colors.accent, Color3.fromRGB(0, 120, 200))
-    topGradient.Parent = topBar
-    
-    -- Título
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Name = "Title"
-    titleLabel.Parent = topBar
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Position = UDim2.new(0, 15, 0, 0)
-    titleLabel.Size = UDim2.new(1, -60, 1, 0)
-    titleLabel.Font = Enum.Font.GothamBold
-    titleLabel.Text = "GUI Principal"
-    titleLabel.TextColor3 = colors.text
-    titleLabel.TextSize = 16
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.ZIndex = 3
-    
-    -- Botão Fechar/Minimizar
-    local toggleButton = Instance.new("TextButton")
-    toggleButton.Name = "ToggleButton"
-    toggleButton.Parent = topBar
-    toggleButton.BackgroundColor3 = Color3.fromRGB(255, 95, 87)
-    toggleButton.Position = UDim2.new(1, -35, 0, 5)
-    toggleButton.Size = UDim2.new(0, 30, 0, 30)
-    toggleButton.Font = Enum.Font.GothamBold
-    toggleButton.Text = "×"
-    toggleButton.TextColor3 = colors.text
-    toggleButton.TextSize = 18
-    toggleButton.ZIndex = 3
-    
-    local toggleCorner = Instance.new("UICorner")
-    toggleCorner.CornerRadius = UDim.new(0, 15)
-    toggleCorner.Parent = toggleButton
-    
-    -- Área de Conteúdo
-    local contentFrame = Instance.new("Frame")
-    contentFrame.Name = "ContentFrame"
-    contentFrame.Parent = mainFrame
-    contentFrame.BackgroundTransparency = 1
-    contentFrame.Position = UDim2.new(0, 0, 0, 40)
-    contentFrame.Size = UDim2.new(1, 0, 1, -40)
-    contentFrame.ZIndex = 2
-    
-    -- Tab Main
-    local mainTab = Instance.new("Frame")
-    mainTab.Name = "MainTab"
-    mainTab.Parent = contentFrame
-    mainTab.BackgroundTransparency = 1
-    mainTab.Size = UDim2.new(1, 0, 1, 0)
-    mainTab.ZIndex = 2
-    
-    -- Lista de Toggles
-    local listLayout = Instance.new("UIListLayout")
-    listLayout.Parent = mainTab
-    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    listLayout.Padding = UDim.new(0, 10)
-    
-    local padding = Instance.new("UIPadding")
-    padding.Parent = mainTab
-    padding.PaddingAll = UDim.new(0, 15)
-    
-    -- Função para criar toggle
-    local function createToggle(name, description, callback)
-        local toggleFrame = Instance.new("Frame")
-        toggleFrame.Name = name .. "Toggle"
-        toggleFrame.Parent = mainTab
-        toggleFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-        toggleFrame.Size = UDim2.new(1, 0, 0, 60)
-        toggleFrame.ZIndex = 3
+-- Sistema de flutuação
+local function ToggleFloat()
+    if FloatEnabled then
+        FloatEnabled = false
+        if FloatConnection then
+            FloatConnection:Disconnect()
+            FloatConnection = nil
+        end
+        if RootPart:FindFirstChild("BodyVelocity") then
+            RootPart.BodyVelocity:Destroy()
+        end
+        if FloatButton then
+            FloatButton.TextButton.Text = "Ativar Float"
+            FloatButton.TextButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+        end
+    else
+        FloatEnabled = true
+        local BodyVelocity = Instance.new("BodyVelocity")
+        BodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+        BodyVelocity.Velocity = Vector3.new(0, 16.2, 0)
+        BodyVelocity.Parent = RootPart
         
-        local toggleCorner = Instance.new("UICorner")
-        toggleCorner.CornerRadius = UDim.new(0, 10)
-        toggleCorner.Parent = toggleFrame
+        if FloatButton then
+            FloatButton.TextButton.Text = "Desativar Float"
+            FloatButton.TextButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+        end
         
-        local toggleLabel = Instance.new("TextLabel")
-        toggleLabel.Parent = toggleFrame
-        toggleLabel.BackgroundTransparency = 1
-        toggleLabel.Position = UDim2.new(0, 15, 0, 5)
-        toggleLabel.Size = UDim2.new(1, -80, 0, 25)
-        toggleLabel.Font = Enum.Font.GothamMedium
-        toggleLabel.Text = name
-        toggleLabel.TextColor3 = colors.text
-        toggleLabel.TextSize = 14
-        toggleLabel.TextXAlignment = Enum.TextXAlignment.Left
-        toggleLabel.ZIndex = 4
-        
-        local toggleDesc = Instance.new("TextLabel")
-        toggleDesc.Parent = toggleFrame
-        toggleDesc.BackgroundTransparency = 1
-        toggleDesc.Position = UDim2.new(0, 15, 0, 30)
-        toggleDesc.Size = UDim2.new(1, -80, 0, 20)
-        toggleDesc.Font = Enum.Font.Gotham
-        toggleDesc.Text = description
-        toggleDesc.TextColor3 = Color3.fromRGB(150, 150, 160)
-        toggleDesc.TextSize = 12
-        toggleDesc.TextXAlignment = Enum.TextXAlignment.Left
-        toggleDesc.ZIndex = 4
-        
-        local toggleButton = Instance.new("TextButton")
-        toggleButton.Parent = toggleFrame
-        toggleButton.BackgroundColor3 = colors.secondary
-        toggleButton.Position = UDim2.new(1, -50, 0.5, -15)
-        toggleButton.Size = UDim2.new(0, 40, 0, 30)
-        toggleButton.Text = ""
-        toggleButton.ZIndex = 4
-        
-        local buttonCorner = Instance.new("UICorner")
-        buttonCorner.CornerRadius = UDim.new(0, 15)
-        buttonCorner.Parent = toggleButton
-        
-        local toggleCircle = Instance.new("Frame")
-        toggleCircle.Parent = toggleButton
-        toggleCircle.BackgroundColor3 = colors.text
-        toggleCircle.Position = UDim2.new(0, 3, 0.5, -12)
-        toggleCircle.Size = UDim2.new(0, 24, 0, 24)
-        toggleCircle.ZIndex = 5
-        
-        local circleCorner = Instance.new("UICorner")
-        circleCorner.CornerRadius = UDim.new(0, 12)
-        circleCorner.Parent = toggleCircle
-        
-        local isEnabled = false
-        
-        toggleButton.MouseButton1Click:Connect(function()
-            isEnabled = not isEnabled
+        FloatConnection = RunService.Heartbeat:Connect(function()
+            if not FloatEnabled then return end
             
-            if isEnabled then
-                tweenObject(toggleButton, {BackgroundColor3 = colors.success}, 0.2)
-                tweenObject(toggleCircle, {Position = UDim2.new(0, 13, 0.5, -12)}, 0.2)
+            local moveVector = Humanoid.MoveDirection
+            if moveVector.Magnitude > 0 then
+                BodyVelocity.Velocity = Vector3.new(moveVector.X * 16, 16.2, moveVector.Z * 16)
             else
-                tweenObject(toggleButton, {BackgroundColor3 = colors.secondary}, 0.2)
-                tweenObject(toggleCircle, {Position = UDim2.new(0, 3, 0.5, -12)}, 0.2)
-            end
-            
-            callback(isEnabled)
-        end)
-        
-        return toggleFrame
-    end
-    
-    -- Função para tornar um elemento arrastável
-    local function makeDraggable(element)
-        local dragging = false
-        local dragStart = nil
-        local startPos = nil
-        
-        element.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                dragging = true
-                dragStart = input.Position
-                startPos = element.Position
-            end
-        end)
-        
-        element.InputChanged:Connect(function(input)
-            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                local delta = input.Position - dragStart
-                element.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            end
-        end)
-        
-        element.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                dragging = false
+                BodyVelocity.Velocity = Vector3.new(0, 16.2, 0)
             end
         end)
     end
-    
-    -- Função para criar botão flutuante
-    local function createFloatingButton(name, text, color, callback)
-        local button = Instance.new("TextButton")
-        button.Name = name
-        button.Parent = playerGui
-        button.BackgroundColor3 = color
-        button.Position = UDim2.new(0, 50, 0, 100)
-        button.Size = UDim2.new(0, 80, 0, 40)
-        button.Font = Enum.Font.GothamBold
-        button.Text = text
-        button.TextColor3 = colors.text
-        button.TextSize = 12
-        button.ZIndex = 10
-        button.Visible = false
-        
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 10)
-        corner.Parent = button
-        
-        local gradient = createGradient(color, Color3.fromRGB(color.R * 255 * 0.8, color.G * 255 * 0.8, color.B * 255 * 0.8))
-        gradient.Parent = button
-        
-        makeDraggable(button)
-        
-        button.MouseButton1Click:Connect(callback)
-        
-        return button
-    end
-    
-    -- Sistema de Flutuação
-    local bodyVelocity
-    local bodyPosition
-    
-    local function enableFloating()
-        if character and rootPart then
-            bodyVelocity = Instance.new("BodyVelocity")
-            bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
-            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-            bodyVelocity.Parent = rootPart
-            
-            bodyPosition = Instance.new("BodyPosition")
-            bodyPosition.MaxForce = Vector3.new(4000, 4000, 4000)
-            bodyPosition.Position = rootPart.Position + Vector3.new(0, 5, 0)
-            bodyPosition.Parent = rootPart
-        end
-    end
-    
-    local function disableFloating()
-        if bodyVelocity then bodyVelocity:Destroy() end
-        if bodyPosition then bodyPosition:Destroy() end
-    end
-    
-    -- Sistema de Plataforma
-    local function createPlatform()
-        platform = Instance.new("Part")
-        platform.Name = "SitPlatform"
-        platform.Parent = workspace
-        platform.Size = Vector3.new(6, 1, 6)
-        platform.Material = Enum.Material.Neon
-        platform.BrickColor = BrickColor.new("Bright blue")
-        platform.CanCollide = true
-        platform.Anchored = true
-        platform.Position = rootPart.Position - Vector3.new(0, 3, 0)
-        
-        local seat = Instance.new("Seat")
-        seat.Parent = platform
-        seat.Size = Vector3.new(2, 1, 2)
-        seat.Material = Enum.Material.Neon
-        seat.BrickColor = BrickColor.new("Bright green")
-        seat.CanCollide = true
-        seat.Anchored = true
-        seat.Position = platform.Position + Vector3.new(0, 1, 0)
-        
-        -- Controles de movimento da plataforma
-        local controlGui = Instance.new("ScreenGui")
-        controlGui.Name = "PlatformControls"
-        controlGui.Parent = playerGui
-        
-        local controlFrame = Instance.new("Frame")
-        controlFrame.Parent = controlGui
-        controlFrame.BackgroundColor3 = colors.background
-        controlFrame.Position = UDim2.new(1, -120, 0.5, -60)
-        controlFrame.Size = UDim2.new(0, 100, 0, 120)
-        controlFrame.ZIndex = 10
-        
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 10)
-        corner.Parent = controlFrame
-        
-        local buttons = {
-            {text = "↑", pos = UDim2.new(0.5, -15, 0, 5), dir = Vector3.new(0, 0, -5)},
-            {text = "←", pos = UDim2.new(0, 5, 0.5, -15), dir = Vector3.new(-5, 0, 0)},
-            {text = "→", pos = UDim2.new(1, -35, 0.5, -15), dir = Vector3.new(5, 0, 0)},
-            {text = "↓", pos = UDim2.new(0.5, -15, 1, -35), dir = Vector3.new(0, 0, 5)}
-        }
-        
-        for _, btn in pairs(buttons) do
-            local button = Instance.new("TextButton")
-            button.Parent = controlFrame
-            button.BackgroundColor3 = colors.accent
-            button.Position = btn.pos
-            button.Size = UDim2.new(0, 30, 0, 30)
-            button.Font = Enum.Font.GothamBold
-            button.Text = btn.text
-            button.TextColor3 = colors.text
-            button.TextSize = 16
-            button.ZIndex = 11
-            
-            local btnCorner = Instance.new("UICorner")
-            btnCorner.CornerRadius = UDim.new(0, 5)
-            btnCorner.Parent = button
-            
-            button.MouseButton1Click:Connect(function()
-                if platform and seat then
-                    platform.Position = platform.Position + btn.dir
-                    seat.Position = seat.Position + btn.dir
-                end
-            end)
-        end
-        
-        seat.Occupant:Connect(function()
-            controlFrame.Visible = seat.Occupant ~= nil
-        end)
-    end
-    
-    local function destroyPlatform()
-        if platform then platform:Destroy() end
-        local controlGui = playerGui:FindFirstChild("PlatformControls")
-        if controlGui then controlGui:Destroy() end
-    end
-    
-    -- Criar Toggles
-    createToggle("Float Mode", "Ativar modo de flutuação no mapa", function(enabled)
-        floatingEnabled = enabled
-        if enabled then
-            floatingButton = createFloatingButton("FloatingButton", "Float", colors.success, function()
-                if floatingEnabled then
-                    enableFloating()
-                end
-            end)
-            floatingButton.Visible = true
-        else
-            disableFloating()
-            if floatingButton then floatingButton:Destroy() end
-        end
-    end)
-    
-    createToggle("Sit Platform", "Criar plataforma para sentar e mover", function(enabled)
-        platformEnabled = enabled
-        if enabled then
-            platformButton = createFloatingButton("PlatformButton", "Sit", colors.accent, function()
-                if platformEnabled then
-                    createPlatform()
-                end
-            end)
-            platformButton.Position = UDim2.new(0, 50, 0, 150)
-            platformButton.Visible = true
-        else
-            destroyPlatform()
-            if platformButton then platformButton:Destroy() end
-        end
-    end)
-    
-    createToggle("Teleport System", "Sistema de salvamento e teleporte", function(enabled)
-        teleportEnabled = enabled
-        if enabled then
-            saveButton = createFloatingButton("SaveButton", "Save", colors.danger, function()
-                if rootPart then
-                    savedPosition = rootPart.Position
-                    print("Posição salva!")
-                end
-            end)
-            saveButton.Position = UDim2.new(0, 50, 0, 200)
-            saveButton.Visible = true
-            
-            teleportButton = createFloatingButton("TeleportButton", "TP", Color3.fromRGB(155, 89, 182), function()
-                if savedPosition and rootPart then
-                    rootPart.CFrame = CFrame.new(savedPosition)
-                end
-            end)
-            teleportButton.Position = UDim2.new(0, 140, 0, 200)
-            teleportButton.Visible = true
-        else
-            if saveButton then saveButton:Destroy() end
-            if teleportButton then teleportButton:Destroy() end
-        end
-    end)
-    
-    -- Funcionalidade do botão toggle
-    toggleButton.MouseButton1Click:Connect(function()
-        isGuiVisible = not isGuiVisible
-        
-        if isGuiVisible then
-            tweenObject(mainFrame, {Position = UDim2.new(0.5, -200, 0.5, -150)}, 0.3, Enum.EasingStyle.Back)
-            toggleButton.Text = "×"
-        else
-            tweenObject(mainFrame, {Position = UDim2.new(0.5, -200, 1, 50)}, 0.3, Enum.EasingStyle.Back)
-            toggleButton.Text = "+"
-        end
-    end)
-    
-    -- Tornar a GUI arrastável
-    makeDraggable(mainFrame)
 end
 
--- Inicializar
-spawn(function()
-    createLoadingScreen()
-    wait(0.5)
-    createMainGui()
-end)
+-- Sistema de cadeira móvel
+local function CreateChairControls()
+    local ScreenGui = Instance.new("ScreenGui")
+    local Frame = Instance.new("Frame")
+    local Corner = Instance.new("UICorner")
+    
+    ScreenGui.Name = "ChairControls"
+    ScreenGui.Parent = game.CoreGui
+    
+    Frame.Parent = ScreenGui
+    Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    Frame.BackgroundTransparency = 0.2
+    Frame.Position = UDim2.new(0.5, -75, 0.8, -50)
+    Frame.Size = UDim2.new(0, 150, 0, 100)
+    Frame.Active = true
+    Frame.Draggable = true
+    
+    Corner.CornerRadius = UDim.new(0, 12)
+    Corner.Parent = Frame
+    
+    local buttons = {
+        {text = "↑", pos = UDim2.new(0.5, -20, 0, 5), dir = Vector3.new(0, 0, -1)},
+        {text = "←", pos = UDim2.new(0, 5, 0.5, -15), dir = Vector3.new(-1, 0, 0)},
+        {text = "→", pos = UDim2.new(1, -45, 0.5, -15), dir = Vector3.new(1, 0, 0)},
+        {text = "↓", pos = UDim2.new(0.5, -20, 1, -35), dir = Vector3.new(0, 0, 1)}
+    }
+    
+    for _, buttonData in pairs(buttons) do
+        local Button = Instance.new("TextButton")
+        local ButtonCorner = Instance.new("UICorner")
+        
+        Button.Parent = Frame
+        Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        Button.Position = buttonData.pos
+        Button.Size = UDim2.new(0, 40, 0, 30)
+        Button.Font = Enum.Font.GothamBold
+        Button.Text = buttonData.text
+        Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+        Button.TextScaled = true
+        
+        ButtonCorner.CornerRadius = UDim.new(0, 6)
+        ButtonCorner.Parent = Button
+        
+        Button.MouseButton1Click:Connect(function()
+            if ChairBlock then
+                local newPosition = ChairBlock.Position + (buttonData.dir * 3)
+                ChairBlock.Position = newPosition
+                RootPart.CFrame = CFrame.new(newPosition + Vector3.new(0, 2, 0))
+            end
+        end)
+        
+        Button.MouseEnter:Connect(function()
+            Button.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+        end)
+        
+        Button.MouseLeave:Connect(function()
+            Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        end)
+    end
+    
+    return ScreenGui
+end
 
--- Reconectar quando o personagem respawna
-player.CharacterAdded:Connect(function(newCharacter)
-    character = newCharacter
-    humanoid = character:WaitForChild("Humanoid")
-    rootPart = character:WaitForChild("HumanoidRootPart")
+local function ToggleChairSystem()
+    if ChairSystemEnabled then
+        ChairSystemEnabled = false
+        
+        -- Remover cadeira e controles
+        if ChairBlock then
+            ChairBlock:Destroy()
+            ChairBlock = nil
+        end
+        if ChairControlsFrame then
+            ChairControlsFrame:Destroy()
+            ChairControlsFrame = nil
+        end
+        if ChairButton then
+            ChairButton.TextButton.Text = "Ativar Cadeira"
+            ChairButton.TextButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+        end
+    else
+        ChairSystemEnabled = true
+        
+        -- Criar bloco da cadeira
+        ChairBlock = Instance.new("Part")
+        ChairBlock.Name = "ChairBlock"
+        ChairBlock.Parent = workspace
+        ChairBlock.Size = Vector3.new(4, 1, 4)
+        ChairBlock.Material = Enum.Material.Neon
+        ChairBlock.BrickColor = BrickColor.new("Bright blue")
+        ChairBlock.Anchored = true
+        ChairBlock.CanCollide = true
+        ChairBlock.Position = RootPart.Position - Vector3.new(0, 3, 0)
+        
+        -- Sentar no bloco
+        local Seat = Instance.new("Seat")
+        Seat.Parent = ChairBlock
+        Seat.Size = Vector3.new(4, 0.5, 4)
+        Seat.Position = ChairBlock.Position + Vector3.new(0, 0.75, 0)
+        Seat.Material = Enum.Material.Fabric
+        Seat.BrickColor = BrickColor.new("Really red")
+        Seat.Anchored = true
+        
+        -- Criar controles
+        ChairControlsFrame = CreateChairControls()
+        
+        if ChairButton then
+            ChairButton.TextButton.Text = "Desativar Cadeira"
+            ChairButton.TextButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+        end
+        
+        -- Sentar automaticamente
+        wait(0.1)
+        Humanoid.Sit = true
+        RootPart.CFrame = CFrame.new(ChairBlock.Position + Vector3.new(0, 2, 0))
+    end
+end
+
+-- Sistema de salvamento de posição
+local function SavePosition()
+    SavedPosition = RootPart.Position
+    game.StarterGui:SetCore("SendNotification", {
+        Title = "Posição Salva!";
+        Text = "Posição atual foi salva com sucesso.";
+        Duration = 3;
+    })
+end
+
+local function TeleportToSavedPosition()
+    if SavedPosition then
+        local targetCFrame = CFrame.new(SavedPosition)
+        
+        -- Animação de teleporte suave
+        local startPos = RootPart.Position
+        local distance = (SavedPosition - startPos).Magnitude
+        local duration = math.min(distance / 50, 3) -- Máximo 3 segundos
+        
+        local bodyPosition = Instance.new("BodyPosition")
+        bodyPosition.MaxForce = Vector3.new(4000, 4000, 4000)
+        bodyPosition.Position = SavedPosition
+        bodyPosition.Parent = RootPart
+        
+        wait(duration)
+        bodyPosition:Destroy()
+        
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "Teleporte Concluído!";
+            Text = "Você foi teleportado para a posição salva.";
+            Duration = 3;
+        })
+    else
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "Erro!";
+            Text = "Nenhuma posição foi salva ainda.";
+            Duration = 3;
+        })
+    end
+end
+
+-- Mostrar barra de carregamento
+ShowLoadingBar()
+
+-- Criar interface Rayfield
+local Window = Rayfield:CreateWindow({
+    Name = "Sistema Avançado de Movimentação",
+    LoadingTitle = "Carregando Sistema...",
+    LoadingSubtitle = "Por favor aguarde",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "MovementSystem",
+        FileName = "Config"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = "",
+        RememberJoins = false
+    },
+    KeySystem = false
+})
+
+-- Tab Principal
+local MainTab = Window:CreateTab("Main", 4483362458)
+
+-- Toggle Float
+local FloatToggle = MainTab:CreateToggle({
+    Name = "Sistema de Flutuação",
+    CurrentValue = false,
+    Flag = "FloatToggle",
+    Callback = function(Value)
+        if Value then
+            FloatButton = CreateDraggableButton("Ativar Float", Color3.fromRGB(70, 70, 70), UDim2.new(0, 50, 0, 100), ToggleFloat)
+        else
+            if FloatEnabled then
+                ToggleFloat() -- Desativar se estiver ativo
+            end
+            if FloatButton then
+                FloatButton:Destroy()
+                FloatButton = nil
+            end
+        end
+    end
+})
+
+-- Toggle Chair System
+local ChairToggle = MainTab:CreateToggle({
+    Name = "Sistema de Cadeira Móvel",
+    CurrentValue = false,
+    Flag = "ChairToggle",
+    Callback = function(Value)
+        if Value then
+            ChairButton = CreateDraggableButton("Ativar Cadeira", Color3.fromRGB(70, 70, 70), UDim2.new(0, 50, 0, 160), ToggleChairSystem)
+        else
+            if ChairSystemEnabled then
+                ToggleChairSystem() -- Desativar se estiver ativo
+            end
+            if ChairButton then
+                ChairButton:Destroy()
+                ChairButton = nil
+            end
+        end
+    end
+})
+
+-- Toggle Position System
+local PositionToggle = MainTab:CreateToggle({
+    Name = "Sistema de Salvamento de Posição",
+    CurrentValue = false,
+    Flag = "PositionToggle",
+    Callback = function(Value)
+        if Value then
+            SaveButton = CreateDraggableButton("Salvar Pos", Color3.fromRGB(100, 150, 100), UDim2.new(0, 50, 0, 220), SavePosition)
+            TeleportButton = CreateDraggableButton("Teleportar", Color3.fromRGB(150, 100, 150), UDim2.new(0, 180, 0, 220), TeleportToSavedPosition)
+        else
+            if SaveButton then
+                SaveButton:Destroy()
+                SaveButton = nil
+            end
+            if TeleportButton then
+                TeleportButton:Destroy()
+                TeleportButton = nil
+            end
+        end
+    end
+})
+
+-- Seção de informações
+MainTab:CreateSection("Informações do Sistema")
+
+MainTab:CreateParagraph({
+    Title = "Como usar:",
+    Content = "1. Flutuação: Ative o toggle e use o botão que aparece\n2. Cadeira: Ative o toggle para criar uma cadeira controlável\n3. Posições: Salve e teleporte para posições específicas"
+})
+
+-- Notificação de inicialização
+Rayfield:Notify({
+    Title = "Sistema Carregado!",
+    Content = "Todos os recursos foram carregados com sucesso.",
+    Duration = 5,
+    Image = 4483362458
+})
+
+-- Limpeza ao sair
+game.Players.PlayerRemoving:Connect(function(player)
+    if player == LocalPlayer then
+        -- Limpar todas as conexões e objetos
+        if FloatConnection then FloatConnection:Disconnect() end
+        if ChairConnection then ChairConnection:Disconnect() end
+        if TeleportConnection then TeleportConnection:Disconnect() end
+    end
 end)
