@@ -607,7 +607,7 @@ local function ToggleChairSystem()
         ChairBlock.Position = RootPart.Position - Vector3.new(0, 3, 0)
         
         -- Sentar no bloco
-      local Seat = Instance.new("Seat")
+        local Seat = Instance.new("Seat")
         Seat.Name = "Seat"
         Seat.Parent = ChairBlock
         Seat.Size = Vector3.new(4, 0.5, 4)
@@ -1055,7 +1055,7 @@ local function ToggleNoClip()
                     NoClipBlock.Transparency = pulse
                     NoClipBlock.Size = Vector3.new(5 + pulse, 0.5, 5 + pulse)
                 elseif riskLevel > 0.4 then
- -- Risco médio: Laranja
+                    -- Risco médio: Laranja
                     NoClipBlock.BrickColor = BrickColor.new("Neon orange")
                     NoClipBlock.Transparency = 0.4
                     NoClipBlock.Size = Vector3.new(4.5, 0.5, 4.5)
