@@ -1,260 +1,428 @@
--- Advanced Movement Hacks Script with Rayfield UI
--- Developed with advanced features and error handling
+-- Rayfield Advanced Movement & Navigation System
+-- Desenvolvido para funcionalidades avançadas de movimento
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Player = Players.LocalPlayer
-local Character = Player.Character or Player.CharacterAdded:Wait()
-local Humanoid = Character:WaitForChild("Humanoid")
-local RootPart = Character:WaitForChild("HumanoidRootPart")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
 
--- Variables
-local floatConnection, seatConnection, noclipConnection, platformConnection
-local floatButton, seatButton, saveButton, tpButton
+-- Variáveis globais do sistema
+local floatingConnection = nil
+local floatingButton = nil
+local seatConnection = nil
+local seatButton = nil
+local seatBlock = nil
+local controlButtons = {}
+local saveButton = nil
+local teleportButton = nil
 local savedPosition = nil
-local seatPart = nil
-local noclipPlatform = nil
-local originalPosition = nil
+local noclipConnection = nil
+local platformConnection = nil
+local followPlatform = nil
+local cloneCheckConnection = nil
+local currentClone = nil
 
--- Button Creation Helper
-local function createFloatingButton(text, position, callback)
+-- Sistema de criação de botões flutuantes avançado
+local function createFloatingButton(text, position, color, callback)
     local screenGui = Instance.new("ScreenGui")
-    local button = Instance.new("TextButton")
-    
-    screenGui.Name = "FloatingButton"
-    screenGui.Parent = game.CoreGui
+    screenGui.Name = "FloatingButton_" .. text
+    screenGui.Parent = player.PlayerGui
     screenGui.ResetOnSpawn = false
-    
-    button.Name = text
-    button.Size = UDim2.new(0, 80, 0, 40)
-    button.Position = position
-    button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    button.BorderSizePixel = 0
-    button.Text = text
-    button.TextColor3 = Color3.white
-    button.TextScaled = true
-    button.Font = Enum.Font.GothamBold
-    button.Parent = screenGui
-    
-    -- Rounded corners
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = button
-    
-    -- Dragging functionality
-    local dragging = false
-    local dragStart = nil
-    local startPos = nil
-    
-    button.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = button.Position
-        end
-    end)
-    
-    button.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
-            button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, 
-                                       startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-    
-    button.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-    
-    button.MouseButton1Click:Connect(callback)
-    return screenGui
-end
-
--- Movement Control Buttons
-local function createMovementButtons()
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "MovementControls"
-    screenGui.Parent = game.CoreGui
-    screenGui.ResetOnSpawn = false
+    screenGui.IgnoreGuiInset = true
     
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 120, 0, 120)
-    frame.Position = UDim2.new(0.5, -60, 0.5, -60)
-    frame.BackgroundTransparency = 0.3
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    frame.Size = UDim2.new(0, 120, 0, 50)
+    frame.Position = position or UDim2.new(0, 100, 0, 100)
+    frame.BackgroundColor3 = color or Color3.fromRGB(45, 45, 45)
+    frame.BorderSizePixel = 0
+    frame.Active = true
+    frame.Draggable = true
     frame.Parent = screenGui
     
+    -- Efeito visual avançado
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
+    corner.CornerRadius = UDim.new(0, 12)
     corner.Parent = frame
     
-    local buttons = {
-        {text = "↑", pos = UDim2.new(0.5, -15, 0, 5), dir = Vector3.new(0, 0, -1)},
-        {text = "↓", pos = UDim2.new(0.5, -15, 1, -35), dir = Vector3.new(0, 0, 1)},
-        {text = "←", pos = UDim2.new(0, 5, 0.5, -15), dir = Vector3.new(-1, 0, 0)},
-        {text = "→", pos = UDim2.new(1, -35, 0.5, -15), dir = Vector3.new(1, 0, 0)}
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(100, 100, 100)
+    stroke.Thickness = 2
+    stroke.Transparency = 0.5
+    stroke.Parent = frame
+    
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 200, 200))
     }
+    gradient.Rotation = 45
+    gradient.Parent = frame
     
-    for _, btnData in pairs(buttons) do
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0, 30, 0, 30)
-        btn.Position = btnData.pos
-        btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-        btn.Text = btnData.text
-        btn.TextColor3 = Color3.white
-        btn.TextScaled = true
-        btn.Font = Enum.Font.GothamBold
-        btn.Parent = frame
-        
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 5)
-        btnCorner.Parent = btn
-        
-        btn.MouseButton1Click:Connect(function()
-            if seatPart then
-                seatPart.CFrame = seatPart.CFrame + btnData.dir * 3
-            end
-        end)
-    end
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, 0, 1, 0)
+    button.Position = UDim2.new(0, 0, 0, 0)
+    button.BackgroundTransparency = 1
+    button.Text = text
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextScaled = true
+    button.Font = Enum.Font.GothamBold
+    button.Parent = frame
     
-    return screenGui
+    -- Animação de clique
+    button.MouseButton1Click:Connect(function()
+        local tween = TweenService:Create(frame, 
+            TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, 0, true),
+            {Size = UDim2.new(0, 110, 0, 45)}
+        )
+        tween:Play()
+        if callback then callback() end
+    end)
+    
+    -- Efeito hover
+    button.MouseEnter:Connect(function()
+        local tween = TweenService:Create(stroke, 
+            TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+            {Color = Color3.fromRGB(150, 150, 255), Transparency = 0.2}
+        )
+        tween:Play()
+    end)
+    
+    button.MouseLeave:Connect(function()
+        local tween = TweenService:Create(stroke, 
+            TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+            {Color = Color3.fromRGB(100, 100, 100), Transparency = 0.5}
+        )
+        tween:Play()
+    end)
+    
+    return screenGui, frame, button
 end
 
--- Float System
-local function startFloat()
-    if floatConnection then return end
+-- Sistema avançado de flutuação
+local function startFloating()
+    if floatingConnection then return end
     
     local bodyVelocity = Instance.new("BodyVelocity")
     bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
     bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-    bodyVelocity.Parent = RootPart
+    bodyVelocity.Parent = rootPart
     
-    floatConnection = RunService.Heartbeat:Connect(function()
-        if not RootPart or not RootPart.Parent then
-            floatConnection:Disconnect()
-            floatConnection = nil
-            return
+    local bodyPosition = Instance.new("BodyPosition")
+    bodyPosition.MaxForce = Vector3.new(4000, 4000, 4000)
+    bodyPosition.Position = rootPart.Position + Vector3.new(0, 5, 0)
+    bodyPosition.Parent = rootPart
+    
+    floatingConnection = RunService.Heartbeat:Connect(function()
+        if not character or not rootPart then return end
+        
+        local camera = workspace.CurrentCamera
+        local moveVector = Vector3.new(0, 0, 0)
+        
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            moveVector = moveVector + camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            moveVector = moveVector - camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            moveVector = moveVector - camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            moveVector = moveVector + camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            moveVector = moveVector + Vector3.new(0, 1, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+            moveVector = moveVector - Vector3.new(0, 1, 0)
         end
         
-        bodyVelocity.Velocity = Vector3.new(0, 16.2, 0)
+        bodyVelocity.Velocity = moveVector * 16
+        bodyPosition.Position = rootPart.Position + (moveVector * 0.5)
     end)
 end
 
-local function stopFloat()
-    if floatConnection then
-        floatConnection:Disconnect()
-        floatConnection = nil
+local function stopFloating()
+    if floatingConnection then
+        floatingConnection:Disconnect()
+        floatingConnection = nil
     end
     
-    for _, obj in pairs(RootPart:GetChildren()) do
-        if obj:IsA("BodyVelocity") then
+    for _, obj in pairs(rootPart:GetChildren()) do
+        if obj.Name == "BodyVelocity" or obj.Name == "BodyPosition" then
             obj:Destroy()
         end
     end
 end
 
--- Seat System
-local function createSeatPart()
-    seatPart = Instance.new("Part")
-    seatPart.Name = "MovingSeat"
-    seatPart.Size = Vector3.new(4, 1, 4)
-    seatPart.Material = Enum.Material.Neon
-    seatPart.BrickColor = BrickColor.new("Bright blue")
-    seatPart.Anchored = true
-    seatPart.CanCollide = true
-    seatPart.Shape = Enum.PartType.Cylinder
-    seatPart.CFrame = RootPart.CFrame - Vector3.new(0, 3, 0)
-    seatPart.Parent = workspace
+-- Sistema avançado de assento com bloco
+local function createSeatBlock()
+    if seatBlock then seatBlock:Destroy() end
     
+    seatBlock = Instance.new("Part")
+    seatBlock.Name = "CustomSeatBlock"
+    seatBlock.Size = Vector3.new(4, 1, 4)
+    seatBlock.Position = rootPart.Position + Vector3.new(0, -3, 0)
+    seatBlock.Anchored = true
+    seatBlock.CanCollide = true
+    seatBlock.Material = Enum.Material.Neon
+    seatBlock.BrickColor = BrickColor.new("Bright blue")
+    seatBlock.Parent = workspace
+    
+    -- Efeitos visuais do bloco
+    local mesh = Instance.new("SpecialMesh")
+    mesh.MeshType = Enum.MeshType.Cylinder
+    mesh.Scale = Vector3.new(1, 1, 1)
+    mesh.Parent = seatBlock
+    
+    local light = Instance.new("PointLight")
+    light.Color = Color3.fromRGB(0, 162, 255)
+    light.Brightness = 2
+    light.Range = 10
+    light.Parent = seatBlock
+    
+    -- Seat
     local seat = Instance.new("Seat")
+    seat.Name = "CustomSeat"
     seat.Size = Vector3.new(2, 0.2, 2)
-    seat.Material = Enum.Material.Plastic
-    seat.BrickColor = BrickColor.new("Really red")
+    seat.Position = seatBlock.Position + Vector3.new(0, 1, 0)
     seat.Anchored = true
-    seat.CanCollide = false
-    seat.CFrame = seatPart.CFrame + Vector3.new(0, 0.6, 0)
-    seat.Parent = seatPart
+    seat.CanCollide = true
+    seat.Material = Enum.Material.Fabric
+    seat.BrickColor = BrickColor.new("Really red")
+    seat.Parent = workspace
     
-    return createMovementButtons()
+    return seatBlock, seat
 end
 
--- Position Save/Teleport System
-local function savePosition()
-    savedPosition = RootPart.CFrame
-    game.StarterGui:SetCore("SendNotification", {
-        Title = "Position Saved",
-        Text = "Current position has been saved!",
-        Duration = 3
-    })
+local function createControlButtons()
+    if #controlButtons > 0 then
+        for _, gui in pairs(controlButtons) do
+            gui:Destroy()
+        end
+        controlButtons = {}
+    end
+    
+    -- Botões direcionais
+    local directions = {
+        {text = "↑", pos = UDim2.new(0, 300, 0, 200), dir = Vector3.new(0, 0, -5)},
+        {text = "↓", pos = UDim2.new(0, 300, 0, 300), dir = Vector3.new(0, 0, 5)},
+        {text = "←", pos = UDim2.new(0, 250, 0, 250), dir = Vector3.new(-5, 0, 0)},
+        {text = "→", pos = UDim2.new(0, 350, 0, 250), dir = Vector3.new(5, 0, 0)}
+    }
+    
+    for _, control in pairs(directions) do
+        local gui, frame, button = createFloatingButton(
+            control.text, 
+            control.pos, 
+            Color3.fromRGB(255, 100, 100),
+            function()
+                if seatBlock then
+                    local tween = TweenService:Create(seatBlock,
+                        TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                        {Position = seatBlock.Position + control.dir}
+                    )
+                    tween:Play()
+                    
+                    -- Move o seat junto
+                    local seat = workspace:FindFirstChild("CustomSeat")
+                    if seat then
+                        local seatTween = TweenService:Create(seat,
+                            TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                            {Position = seat.Position + control.dir}
+                        )
+                        seatTween:Play()
+                    end
+                end
+            end
+        )
+        table.insert(controlButtons, gui)
+    end
 end
 
-local function teleportToSaved()
+-- Sistema de salvamento e teleporte de posição
+local function saveCurrentPosition()
+    savedPosition = rootPart.Position
+    
+    -- Feedback visual
+    local gui = Instance.new("ScreenGui")
+    gui.Parent = player.PlayerGui
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 300, 0, 50)
+    label.Position = UDim2.new(0.5, -150, 0, 50)
+    label.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Text = "Posição Salva: " .. math.floor(savedPosition.X) .. ", " .. math.floor(savedPosition.Y) .. ", " .. math.floor(savedPosition.Z)
+    label.TextScaled = true
+    label.Font = Enum.Font.GothamBold
+    label.Parent = gui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = label
+    
+    -- Fade out animation
+    local tween = TweenService:Create(label,
+        TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {BackgroundTransparency = 1, TextTransparency = 1}
+    )
+    tween:Play()
+    tween.Completed:Connect(function()
+        gui:Destroy()
+    end)
+end
+
+local function teleportToSavedPosition()
     if not savedPosition then
-        game.StarterGui:SetCore("SendNotification", {
-            Title = "No Position",
-            Text = "No saved position found!",
-            Duration = 3
-        })
+        -- Mensagem de erro
+        local gui = Instance.new("ScreenGui")
+        gui.Parent = player.PlayerGui
+        
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(0, 300, 0, 50)
+        label.Position = UDim2.new(0.5, -150, 0, 50)
+        label.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        label.Text = "Nenhuma posição salva!"
+        label.TextScaled = true
+        label.Font = Enum.Font.GothamBold
+        label.Parent = gui
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = label
+        
+        wait(2)
+        gui:Destroy()
         return
     end
     
-    local tween = TweenService:Create(RootPart, 
-        TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
-        {CFrame = savedPosition}
+    -- Teleporte suave
+    local tween = TweenService:Create(rootPart,
+        TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+        {Position = savedPosition}
     )
     tween:Play()
     
-    game.StarterGui:SetCore("SendNotification", {
-        Title = "Teleporting",
-        Text = "Floating to saved position...",
-        Duration = 2
-    })
+    -- Efeito visual durante teleporte
+    local gui = Instance.new("ScreenGui")
+    gui.Parent = player.PlayerGui
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 300, 0, 50)
+    label.Position = UDim2.new(0.5, -150, 0, 50)
+    label.BackgroundColor3 = Color3.fromRGB(100, 100, 255)
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Text = "Teleportando..."
+    label.TextScaled = true
+    label.Font = Enum.Font.GothamBold
+    label.Parent = gui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = label
+    
+    tween.Completed:Connect(function()
+        label.Text = "Teleporte Concluído!"
+        label.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        wait(1)
+        gui:Destroy()
+    end)
 end
 
--- NoClip System with Anti-Fall Platform
-local function createNoclipPlatform()
-    noclipPlatform = Instance.new("Part")
-    noclipPlatform.Name = "NoclipPlatform"
-    noclipPlatform.Size = Vector3.new(6, 0.5, 6)
-    noclipPlatform.Material = Enum.Material.ForceField
-    noclipPlatform.BrickColor = BrickColor.new("Bright green")
-    noclipPlatform.Anchored = true
-    noclipPlatform.CanCollide = true
-    noclipPlatform.Transparency = 0.7
-    noclipPlatform.Parent = workspace
-end
-
+-- Sistema NoClip avançado com plataforma e clone
 local function startNoclip()
     if noclipConnection then return end
     
-    originalPosition = RootPart.CFrame
-    createNoclipPlatform()
+    -- Desabilita colisão
+    for _, part in pairs(character:GetChildren()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            part.CanCollide = false
+        end
+    end
     
-    noclipConnection = RunService.Stepped:Connect(function()
-        if not Character or not RootPart or not noclipPlatform then return end
+    -- Cria plataforma que segue o player
+    followPlatform = Instance.new("Part")
+    followPlatform.Name = "FollowPlatform"
+    followPlatform.Size = Vector3.new(6, 1, 6)
+    followPlatform.Anchored = true
+    followPlatform.CanCollide = true
+    followPlatform.Material = Enum.Material.ForceField
+    followPlatform.BrickColor = BrickColor.new("Bright green")
+    followPlatform.Transparency = 0.5
+    followPlatform.Parent = workspace
+    
+    -- Luz na plataforma
+    local light = Instance.new("PointLight")
+    light.Color = Color3.fromRGB(0, 255, 0)
+    light.Brightness = 1
+    light.Range = 15
+    light.Parent = followPlatform
+    
+    -- Sistema de seguimento da plataforma
+    platformConnection = RunService.Heartbeat:Connect(function()
+        if not character or not rootPart or not followPlatform then return end
         
-        -- Enable noclip
-        for _, part in pairs(Character:GetChildren()) do
-            if part:IsA("BasePart") and part ~= RootPart then
-                part.CanCollide = false
+        local raycast = workspace:Raycast(rootPart.Position, Vector3.new(0, -50, 0))
+        if raycast then
+            followPlatform.Position = Vector3.new(rootPart.Position.X, raycast.Position.Y - 0.5, rootPart.Position.Z)
+        else
+            followPlatform.Position = Vector3.new(rootPart.Position.X, rootPart.Position.Y - 10, rootPart.Position.Z)
+        end
+    end)
+    
+    -- Sistema de detecção de atravessar o chão
+    cloneCheckConnection = RunService.Heartbeat:Connect(function()
+        if not character or not rootPart then return end
+        
+        local raycast = workspace:Raycast(rootPart.Position, Vector3.new(0, -5, 0))
+        if not raycast then
+            -- Player está no ar/atravessou o chão
+            if not currentClone then
+                -- Cria clone
+                currentClone = character:Clone()
+                currentClone.Name = "TempClone"
+                currentClone.Parent = workspace
+                
+                -- Remove scripts do clone
+                for _, obj in pairs(currentClone:GetDescendants()) do
+                    if obj:IsA("Script") or obj:IsA("LocalScript") then
+                        obj:Destroy()
+                    end
+                end
+                
+                -- Posiciona clone em local seguro
+                local safePos = rootPart.Position + Vector3.new(0, 5, 0)
+                currentClone.HumanoidRootPart.Position = safePos
+                
+                -- Teleporta depois de 1 segundo
+                spawn(function()
+                    wait(1)
+                    if currentClone and currentClone.Parent then
+                        rootPart.Position = currentClone.HumanoidRootPart.Position
+                        currentClone:Destroy()
+                        currentClone = nil
+                    end
+                end)
             end
         end
-        
-        -- Platform follows player
-        local raycast = workspace:Raycast(RootPart.Position, Vector3.new(0, -50, 0))
-        local platformY = raycast and raycast.Position.Y or (RootPart.Position.Y - 10)
-        
-        noclipPlatform.CFrame = CFrame.new(RootPart.Position.X, platformY, RootPart.Position.Z)
-        
-        -- Anti-fall detection
-        if RootPart.Position.Y < platformY - 5 then
-            RootPart.CFrame = CFrame.new(RootPart.Position.X, platformY + 5, RootPart.Position.Z)
+    end)
+    
+    noclipConnection = RunService.Stepped:Connect(function()
+        if character then
+            for _, part in pairs(character:GetChildren()) do
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                    part.CanCollide = false
+                end
+            end
         end
     end)
 end
@@ -265,127 +433,138 @@ local function stopNoclip()
         noclipConnection = nil
     end
     
-    if noclipPlatform then
-        noclipPlatform:Destroy()
-        noclipPlatform = nil
+    if platformConnection then
+        platformConnection:Disconnect()
+        platformConnection = nil
     end
     
-    -- Restore collision
-    for _, part in pairs(Character:GetChildren()) do
+    if cloneCheckConnection then
+        cloneCheckConnection:Disconnect()
+        cloneCheckConnection = nil
+    end
+    
+    if followPlatform then
+        followPlatform:Destroy()
+        followPlatform = nil
+    end
+    
+    if currentClone then
+        currentClone:Destroy()
+        currentClone = nil
+    end
+    
+    -- Reabilita colisão
+    for _, part in pairs(character:GetChildren()) do
         if part:IsA("BasePart") then
             part.CanCollide = true
         end
     end
 end
 
--- Cleanup Function
-local function cleanup()
-    stopFloat()
-    stopNoclip()
-    
-    if seatPart then seatPart:Destroy() end
-    if floatButton then floatButton:Destroy() end
-    if seatButton then seatButton:Destroy() end
-    if saveButton then saveButton:Destroy() end
-    if tpButton then tpButton:Destroy() end
-    
-    for _, gui in pairs(game.CoreGui:GetChildren()) do
-        if gui.Name:find("FloatingButton") or gui.Name:find("MovementControls") then
-            gui:Destroy()
-        end
-    end
-end
-
--- Create Rayfield Window
+-- Interface Rayfield Principal
 local Window = Rayfield:CreateWindow({
-    Name = "Advanced Movement Hacks",
-    LoadingTitle = "Loading Movement System...",
-    LoadingSubtitle = "by Advanced Scripts",
+    Name = "🚀 Sistema Avançado de Movimento & Navegação",
+    LoadingTitle = "Carregando Sistema...",
+    LoadingSubtitle = "Inicializando módulos avançados",
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "AdvancedMovement",
+        FolderName = "MovementSystem",
         FileName = "Config"
-    }
+    },
+    Discord = {
+        Enabled = false,
+    },
+    KeySystem = false,
 })
 
--- Main Tab
-local MainTab = Window:CreateTab("Main", 4483362458)
+-- Tab Principal
+local MainTab = Window:CreateTab("🏠 Principal", 4483362458)
 
--- Float Toggle
-local FloatToggle = MainTab:CreateToggle({
-    Name = "Float Mode",
+-- Sistema de Flutuação
+local FloatingSection = MainTab:CreateSection("✈️ Sistema de Flutuação")
+
+local FloatingToggle = MainTab:CreateToggle({
+    Name = "🎈 Ativar Sistema de Flutuação",
     CurrentValue = false,
-    Flag = "FloatToggle",
+    Flag = "FloatingToggle",
     Callback = function(Value)
         if Value then
-            startFloat()
-            floatButton = createFloatingButton("Float", UDim2.new(0, 10, 0.5, -20), function()
-                FloatToggle:Set(not FloatToggle.CurrentValue)
+            floatingButton = createFloatingButton("FLUTUAR", UDim2.new(0, 50, 0, 200), Color3.fromRGB(100, 200, 255), function()
+                if floatingConnection then
+                    stopFloating()
+                else
+                    startFloating()
+                end
             end)
         else
-            stopFloat()
-            if floatButton then
-                floatButton:Destroy()
-                floatButton = nil
+            stopFloating()
+            if floatingButton then
+                floatingButton:Destroy()
+                floatingButton = nil
             end
         end
-    end
+    end,
 })
 
--- Seat Toggle
+-- Sistema de Assento
+local SeatSection = MainTab:CreateSection("🪑 Sistema de Assento Controlável")
+
 local SeatToggle = MainTab:CreateToggle({
-    Name = "Moving Seat",
+    Name = "🎮 Ativar Sistema de Assento",
     CurrentValue = false,
     Flag = "SeatToggle",
     Callback = function(Value)
         if Value then
-            local movementGui = createSeatPart()
-            seatButton = createFloatingButton("Seat", UDim2.new(0, 100, 0.5, -20), function()
-                SeatToggle:Set(not SeatToggle.CurrentValue)
+            seatButton = createFloatingButton("CRIAR ASSENTO", UDim2.new(0, 50, 0, 300), Color3.fromRGB(255, 150, 100), function()
+                local block, seat = createSeatBlock()
+                createControlButtons()
             end)
         else
-            if seatPart then
-                seatPart:Destroy()
-                seatPart = nil
-            end
             if seatButton then
                 seatButton:Destroy()
                 seatButton = nil
             end
-            for _, gui in pairs(game.CoreGui:GetChildren()) do
-                if gui.Name == "MovementControls" then
-                    gui:Destroy()
-                end
+            if seatBlock then seatBlock:Destroy() end
+            if workspace:FindFirstChild("CustomSeat") then
+                workspace.CustomSeat:Destroy()
             end
+            for _, gui in pairs(controlButtons) do
+                gui:Destroy()
+            end
+            controlButtons = {}
         end
-    end
+    end,
 })
 
--- Position Save/TP Toggle
+-- Sistema de Salvamento de Posição
+local PositionSection = MainTab:CreateSection("📍 Sistema de Posições")
+
 local PositionToggle = MainTab:CreateToggle({
-    Name = "Position Manager",
+    Name = "💾 Ativar Sistema de Posições",
     CurrentValue = false,
     Flag = "PositionToggle",
     Callback = function(Value)
         if Value then
-            saveButton = createFloatingButton("Save", UDim2.new(0, 10, 0.3, 0), savePosition)
-            tpButton = createFloatingButton("TP", UDim2.new(0, 100, 0.3, 0), teleportToSaved)
+            saveButton = createFloatingButton("SALVAR POS", UDim2.new(0, 50, 0, 400), Color3.fromRGB(100, 255, 100), saveCurrentPosition)
+            teleportButton = createFloatingButton("IR PARA POS", UDim2.new(0, 180, 0, 400), Color3.fromRGB(255, 255, 100), teleportToSavedPosition)
         else
             if saveButton then
                 saveButton:Destroy()
                 saveButton = nil
             end
-            if tpButton then
-                tpButton:Destroy()
-                tpButton = nil
+            if teleportButton then
+                teleportButton:Destroy()
+                teleportButton = nil
             end
         end
-    end
+    end,
 })
 
--- NoClip Toggle
+-- Sistema NoClip
+local NoclipSection = MainTab:CreateSection("👻 Sistema NoClip Avançado")
+
 local NoclipToggle = MainTab:CreateToggle({
-    Name = "NoClip + Platform",
+    Name = "🌟 Ativar NoClip com Proteção",
     CurrentValue = false,
     Flag = "NoclipToggle",
     Callback = function(Value)
@@ -394,29 +573,59 @@ local NoclipToggle = MainTab:CreateToggle({
         else
             stopNoclip()
         end
-    end
+    end,
 })
 
--- Character respawn handling
-Player.CharacterAdded:Connect(function(newCharacter)
-    Character = newCharacter
-    Humanoid = Character:WaitForChild("Humanoid")
-    RootPart = Character:WaitForChild("HumanoidRootPart")
+-- Informações e Status
+local InfoSection = MainTab:CreateSection("ℹ️ Informações do Sistema")
+
+MainTab:CreateLabel("Sistema desenvolvido com recursos avançados")
+MainTab:CreateLabel("Controles de Flutuação: WASD + Space/Shift")
+MainTab:CreateLabel("Versão: 2.0 Advanced")
+
+-- Botão de emergência
+MainTab:CreateButton({
+    Name = "🆘 Parar Todos os Sistemas",
+    Callback = function()
+        stopFloating()
+        stopNoclip()
+        
+        -- Limpa todos os botões e objetos
+        if floatingButton then floatingButton:Destroy() end
+        if seatButton then seatButton:Destroy() end
+        if seatBlock then seatBlock:Destroy() end
+        if workspace:FindFirstChild("CustomSeat") then workspace.CustomSeat:Destroy() end
+        if saveButton then saveButton:Destroy() end
+        if teleportButton then teleportButton:Destroy() end
+        
+        for _, gui in pairs(controlButtons) do
+            gui:Destroy()
+        end
+        controlButtons = {}
+        
+        -- Reset toggles
+        FloatingToggle:Set(false)
+        SeatToggle:Set(false)
+        PositionToggle:Set(false)
+        NoclipToggle:Set(false)
+    end,
+})
+
+-- Sistema de atualização quando o personagem respawna
+player.CharacterAdded:Connect(function(newCharacter)
+    character = newCharacter
+    humanoid = character:WaitForChild("Humanoid")
+    rootPart = character:WaitForChild("HumanoidRootPart")
     
-    wait(1)
-    cleanup()
+    -- Para todos os sistemas ativos
+    stopFloating()
+    stopNoclip()
 end)
 
--- Cleanup on script removal
-game.Players.PlayerRemoving:Connect(function(player)
-    if player == Player then
-        cleanup()
-    end
-end)
-
-Rayfield:Notify({
-    Title = "Script Loaded",
-    Content = "Advanced Movement Hacks loaded successfully!",
-    Duration = 5,
-    Image = 4483362458
-})
+print("🚀 Sistema Avançado de Movimento carregado com sucesso!")
+print("📋 Funcionalidades disponíveis:")
+print("   ✈️ Sistema de Flutuação com controles WASD")
+print("   🪑 Sistema de Assento Controlável")
+print("   📍 Sistema de Salvamento de Posições")  
+print("   👻 Sistema NoClip com Proteção Anti-Queda")
+print("🎮 Abra a GUI para começar!"
