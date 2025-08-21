@@ -1,606 +1,759 @@
--- Rayfield GUI Script - Parte 1
--- Carregando Rayfield Library
+-- Sistema Completo Rayfield com Funcionalidades Avançadas
+-- Carregamento da biblioteca Rayfield
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- Variáveis globais
+-- Serviços
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 
-local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
-local Character = Player.Character or Player.CharacterAdded:Wait()
+-- Variáveis globais
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
 local RootPart = Character:WaitForChild("HumanoidRootPart")
 
--- Variáveis de controle
-local FloatConnection
-local isFloating = false
-local floatHeight = 16
-local floatButton
-local floatButtonConnection
-
-local SitConnection
-local isSitting = false
-local sitBlock
-local sitButton
-local sitControlButtons = {}
-local blockMoveSpeed = 16
-
+-- Estados dos sistemas
+local FloatEnabled = false
+local ChairSystemEnabled = false
+local PositionSystemEnabled = false
+local NoClipEnabled = false
 local SavedPosition = nil
-local saveButton
-local teleportButton
-local isTeleporting = false
 
-local NoClipConnection
-local FollowPlatformConnection
-local isNoClipping = false
-local followPlatform
-local cloneCreated = false
-local lastClone
+-- Conexões ativas
+local FloatConnection = nil
+local ChairConnection = nil
+local TeleportConnection = nil
+local NoClipConnection = nil
 
--- Criando a GUI principal
-local Window = Rayfield:CreateWindow({
-   Name = "Multi-Function Script",
-   LoadingTitle = "Carregando Script Avançado",
-   LoadingSubtitle = "by YourName",
-   ConfigurationSaving = {
-      Enabled = true,
-      FolderName = "MultiFunction",
-      FileName = "Config"
-   },
-   Discord = {
-      Enabled = false,
-   },
-   KeySystem = false,
-})
+-- Objetos da interface
+local FloatButton = nil
+local ChairButton = nil
+local SaveButton = nil
+local TeleportButton = nil
+local ChairBlock = nil
+local ChairControlsFrame = nil
+local NoClipBlock = nil
 
--- Tab Principal
-local MainTab = Window:CreateTab("Main", 4483362458)
+-- Variáveis para controle de movimento contínuo
+local MovementConnections = {}
+local ChairHeight = 0
 
--- Função para criar botões flutuantes arrastaveis
-local function CreateDraggableButton(name, size, position, callback)
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = name .. "Gui"
-    screenGui.Parent = PlayerGui
-    screenGui.ResetOnSpawn = false
-    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+-- Função para criar barra de carregamento
+local function ShowLoadingBar()
+    local ScreenGui = Instance.new("ScreenGui")
+    local Frame = Instance.new("Frame")
+    local LoadingBar = Instance.new("Frame")
+    local Fill = Instance.new("Frame")
+    local LoadingText = Instance.new("TextLabel")
+    local Corner = Instance.new("UICorner")
+    local BarCorner = Instance.new("UICorner")
+    local FillCorner = Instance.new("UICorner")
     
-    local frame = Instance.new("Frame")
-    frame.Name = name .. "Frame"
-    frame.Size = size or UDim2.new(0, 100, 0, 50)
-    frame.Position = position or UDim2.new(0.5, 0, 0.5, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-    frame.BorderSizePixel = 0
-    frame.Parent = screenGui
-    frame.Active = true
-    frame.Draggable = true
+    ScreenGui.Name = "LoadingScreen"
+    ScreenGui.Parent = game.CoreGui
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = frame
+    Frame.Parent = ScreenGui
+    Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    Frame.BackgroundTransparency = 0.1
+    Frame.Position = UDim2.new(0, 0, 0, 0)
+    Frame.Size = UDim2.new(1, 0, 1, 0)
     
-    local button = Instance.new("TextButton")
-    button.Name = name .. "Button"
-    button.Size = UDim2.new(1, 0, 1, 0)
-    button.Position = UDim2.new(0, 0, 0, 0)
-    button.BackgroundTransparency = 1
-    button.Text = name
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.TextScaled = true
-    button.Font = Enum.Font.GothamBold
-    button.Parent = frame
+    Corner.CornerRadius = UDim.new(0, 12)
+    Corner.Parent = Frame
     
-    if callback then
-        button.MouseButton1Click:Connect(callback)
-    end
+    LoadingBar.Name = "LoadingBar"
+    LoadingBar.Parent = Frame
+    LoadingBar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    LoadingBar.Position = UDim2.new(0.5, -200, 0.5, -15)
+    LoadingBar.Size = UDim2.new(0, 400, 0, 30)
     
-    return screenGui, frame, button
+    BarCorner.CornerRadius = UDim.new(0, 8)
+    BarCorner.Parent = LoadingBar
+    
+    Fill.Name = "Fill"
+    Fill.Parent = LoadingBar
+    Fill.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+    Fill.Size = UDim2.new(0, 0, 1, 0)
+    
+    FillCorner.CornerRadius = UDim.new(0, 8)
+    FillCorner.Parent = Fill
+    
+    LoadingText.Parent = Frame
+    LoadingText.BackgroundTransparency = 1
+    LoadingText.Position = UDim2.new(0.5, -100, 0.5, -50)
+    LoadingText.Size = UDim2.new(0, 200, 0, 30)
+    LoadingText.Font = Enum.Font.GothamBold
+    LoadingText.Text = "Carregando Sistema..."
+    LoadingText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    LoadingText.TextScaled = true
+    
+    -- Animação da barra
+    local tween = TweenService:Create(Fill, TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 1, 0)})
+    tween:Play()
+    
+    tween.Completed:Connect(function()
+        LoadingText.Text = "Sistema Carregado!"
+        wait(0.5)
+        ScreenGui:Destroy()
+    end)
+    
+    wait(2.5)
 end
 
--- Função Float Toggle
-local function ToggleFloat(enabled)
-    if enabled and not isFloating then
-        isFloating = true
-        
-        -- Criar botão flutuante
-        local gui, frame, button = CreateDraggableButton("Float", 
-            UDim2.new(0, 80, 0, 40), 
-            UDim2.new(0, 50, 0, 200),
-            function()
-                if FloatConnection then
-                    FloatConnection:Disconnect()
-                    FloatConnection = nil
-                    button.Text = "Float OFF"
-                    button.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-                else
-                    FloatConnection = RunService.Heartbeat:Connect(function()
-                        if Character and Character:FindFirstChild("HumanoidRootPart") then
-                            local rootPart = Character.HumanoidRootPart
-                            local bodyVelocity = rootPart:FindFirstChild("FloatVelocity")
-                            
-                            if not bodyVelocity then
-                                bodyVelocity = Instance.new("BodyVelocity")
-                                bodyVelocity.Name = "FloatVelocity"
-                                bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
-                                bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-                                bodyVelocity.Parent = rootPart
-                            end
-                            
-                            local raycast = Workspace:Raycast(rootPart.Position, Vector3.new(0, -1000, 0))
-                            local targetY = raycast and (raycast.Position.Y + floatHeight) or (rootPart.Position.Y)
-                            
-                            local currentY = rootPart.Position.Y
-                            local difference = targetY - currentY
-                            
-                            if math.abs(difference) > 2 then
-                                bodyVelocity.Velocity = Vector3.new(0, difference * 2, 0)
-                            else
-                                bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-                            end
-                        end
-                    end)
-                    button.Text = "Float ON"
-                    frame.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
-                end
-            end
-        )
-        
-        floatButton = gui
-        button.Text = "Float OFF"
-        frame.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-        
-    elseif not enabled and isFloating then
-        isFloating = false
+-- Função para criar botão flutuante arrastável
+local function CreateDraggableButton(text, color, position, callback)
+    local ScreenGui = Instance.new("ScreenGui")
+    local Button = Instance.new("TextButton")
+    local Corner = Instance.new("UICorner")
+    
+    ScreenGui.Name = text .. "Gui"
+    ScreenGui.Parent = game.CoreGui
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    Button.Parent = ScreenGui
+    Button.BackgroundColor3 = color
+    Button.Position = position
+    Button.Size = UDim2.new(0, 120, 0, 40)
+    Button.Font = Enum.Font.GothamBold
+    Button.Text = text
+    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Button.TextScaled = true
+    Button.Active = true
+    Button.Draggable = true
+    
+    Corner.CornerRadius = UDim.new(0, 8)
+    Corner.Parent = Button
+    
+    -- Efeito de hover
+    Button.MouseEnter:Connect(function()
+        TweenService:Create(Button, TweenInfo.new(0.2), {Size = UDim2.new(0, 130, 0, 45)}):Play()
+    end)
+    
+    Button.MouseLeave:Connect(function()
+        TweenService:Create(Button, TweenInfo.new(0.2), {Size = UDim2.new(0, 120, 0, 40)}):Play()
+    end)
+    
+    Button.MouseButton1Click:Connect(callback)
+    
+    return ScreenGui
+end
+
+-- Sistema de flutuação
+local function ToggleFloat()
+    if FloatEnabled then
+        FloatEnabled = false
         if FloatConnection then
             FloatConnection:Disconnect()
             FloatConnection = nil
         end
-        if floatButton then
-            floatButton:Destroy()
-            floatButton = nil
+        if RootPart:FindFirstChild("BodyVelocity") then
+            RootPart.BodyVelocity:Destroy()
         end
-        if Character and Character:FindFirstChild("HumanoidRootPart") then
-            local bodyVelocity = Character.HumanoidRootPart:FindFirstChild("FloatVelocity")
-            if bodyVelocity then
-                bodyVelocity:Destroy()
+        if FloatButton then
+            FloatButton.TextButton.Text = "Ativar Float"
+            FloatButton.TextButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+        end
+    else
+        FloatEnabled = true
+        local BodyVelocity = Instance.new("BodyVelocity")
+        BodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+        BodyVelocity.Velocity = Vector3.new(0, 16.2, 0)
+        BodyVelocity.Parent = RootPart
+        
+        if FloatButton then
+            FloatButton.TextButton.Text = "Desativar Float"
+            FloatButton.TextButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+        end
+        
+        FloatConnection = RunService.Heartbeat:Connect(function()
+            if not FloatEnabled then return end
+            
+            local moveVector = Humanoid.MoveDirection
+            if moveVector.Magnitude > 0 then
+                BodyVelocity.Velocity = Vector3.new(moveVector.X * 16, 16.2, moveVector.Z * 16)
+            else
+                BodyVelocity.Velocity = Vector3.new(0, 16.2, 0)
             end
-        end
+        end)
     end
 end
 
--- Função Sit Block Toggle
-local function ToggleSitBlock(enabled)
-    if enabled and not isSitting then
-        isSitting = true
-        
-        -- Criar botão principal do Sit Block
-        local gui, frame, button = CreateDraggableButton("Sit Block", 
-            UDim2.new(0, 100, 0, 40), 
-            UDim2.new(0, 200, 0, 200),
-            function()
-                if not sitBlock then
-                    -- Criar o bloco para sentar
-                    sitBlock = Instance.new("Part")
-                    sitBlock.Name = "SitBlock"
-                    sitBlock.Size = Vector3.new(4, 1, 4)
-                    sitBlock.Material = Enum.Material.Neon
-                    sitBlock.BrickColor = BrickColor.new("Bright blue")
-                    sitBlock.Anchored = true
-                    sitBlock.CanCollide = true
-                    sitBlock.Position = Character.HumanoidRootPart.Position + Vector3.new(0, -3, 0)
-                    sitBlock.Parent = Workspace
-                    
-                    -- Fazer o personagem sentar no bloco
-                    Humanoid.Sit = true
-                    Character.HumanoidRootPart.CFrame = CFrame.new(sitBlock.Position + Vector3.new(0, 2, 0))
-                    
-                    -- Criar botões de controle
-                    local controlPositions = {
-                        {name = "←", pos = UDim2.new(0, 50, 0, 300), dir = Vector3.new(-1, 0, 0)},
-                        {name = "↑", pos = UDim2.new(0, 100, 0, 250), dir = Vector3.new(0, 0, -1)},
-                        {name = "↓", pos = UDim2.new(0, 100, 0, 350), dir = Vector3.new(0, 0, 1)},
-                        {name = "→", pos = UDim2.new(0, 150, 0, 300), dir = Vector3.new(1, 0, 0)}
-                    }
-                    
-                    for _, control in pairs(controlPositions) do
-                        local controlGui, controlFrame, controlButton = CreateDraggableButton(
-                            control.name,
-                            UDim2.new(0, 40, 0, 40),
-                            control.pos,
-                            function()
-                                if sitBlock then
-                                    local tween = TweenService:Create(
-                                        sitBlock,
-                                        TweenInfo.new(0.5, Enum.EasingStyle.Quad),
-                                        {Position = sitBlock.Position + (control.dir * blockMoveSpeed)}
-                                    )
-                                    tween:Play()
-                                    
-                                    -- Mover o personagem junto
-                                    tween.Completed:Connect(function()
-                                        if Character and Character:FindFirstChild("HumanoidRootPart") then
-                                            Character.HumanoidRootPart.CFrame = CFrame.new(sitBlock.Position + Vector3.new(0, 2, 0))
-                                        end
-                                    end)
-                                end
-                            end
-                        )
-                        table.insert(sitControlButtons, controlGui)
-                    end
-                    
-                    button.Text = "Remove Block"
-                    frame.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
-                else
-                    -- Remover bloco e controles
-                    if sitBlock then
-                        sitBlock:Destroy()
-                        sitBlock = nil
-                    end
-                    
-                    for _, controlGui in pairs(sitControlButtons) do
-                        if controlGui then
-                            controlGui:Destroy()
-                        end
-                    end
-                    sitControlButtons = {}
-                    
-                    Humanoid.Sit = false
-                    button.Text = "Sit Block"
-                    frame.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-                end
-            end
-        )
-        
-        sitButton = gui
-        button.Text = "Sit Block"
-        frame.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-        
-    elseif not enabled and isSitting then
-        isSitting = false
-        if sitButton then
-            sitButton:Destroy()
-            sitButton = nil
+-- Variáveis para controle de movimento contínuo
+local MovementConnections = {}
+local ChairHeight = 0
+
+-- Sistema de cadeira móvel
+local function CreateChairControls()
+    local ScreenGui = Instance.new("ScreenGui")
+    local Frame = Instance.new("Frame")
+    local Corner = Instance.new("UICorner")
+    
+    ScreenGui.Name = "ChairControls"
+    ScreenGui.Parent = game.CoreGui
+    
+    Frame.Parent = ScreenGui
+    Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    Frame.BackgroundTransparency = 0.2
+    Frame.Position = UDim2.new(0.5, -90, 0.8, -75)
+    Frame.Size = UDim2.new(0, 180, 0, 150)
+    Frame.Active = true
+    Frame.Draggable = true
+    
+    Corner.CornerRadius = UDim.new(0, 12)
+    Corner.Parent = Frame
+    
+    -- Título do controle
+    local Title = Instance.new("TextLabel")
+    Title.Parent = Frame
+    Title.BackgroundTransparency = 1
+    Title.Position = UDim2.new(0, 0, 0, 5)
+    Title.Size = UDim2.new(1, 0, 0, 25)
+    Title.Font = Enum.Font.GothamBold
+    Title.Text = "Controles da Cadeira"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.TextScaled = true
+    
+    local buttons = {
+        {text = "↑", pos = UDim2.new(0.5, -20, 0, 35), dir = Vector3.new(0, 0, -1)},
+        {text = "←", pos = UDim2.new(0, 10, 0.5, -15), dir = Vector3.new(-1, 0, 0)},
+        {text = "→", pos = UDim2.new(1, -50, 0.5, -15), dir = Vector3.new(1, 0, 0)},
+        {text = "↓", pos = UDim2.new(0.5, -20, 1, -75), dir = Vector3.new(0, 0, 1)}
+    }
+    
+    -- Função para parar movimento
+    local function StopMovement(buttonId)
+        if MovementConnections[buttonId] then
+            MovementConnections[buttonId]:Disconnect()
+            MovementConnections[buttonId] = nil
         end
-        if sitBlock then
-            sitBlock:Destroy()
-            sitBlock = nil
-        end
-        for _, controlGui in pairs(sitControlButtons) do
-            if controlGui then
-                controlGui:Destroy()
-            end
-        end
-        sitControlButtons = {}
-        Humanoid.Sit = false
     end
-end
-
--- Rayfield GUI Script - Parte 2 (Continuação)
-
--- Função Save/Teleport Position Toggle
-local function ToggleSaveTeleport(enabled)
-    if enabled and not saveButton then
-        -- Criar botão Save Position
-        local saveGui, saveFrame, saveBtnComponent = CreateDraggableButton("Save Pos", 
-            UDim2.new(0, 80, 0, 40), 
-            UDim2.new(0, 300, 0, 200),
-            function()
-                if Character and Character:FindFirstChild("HumanoidRootPart") then
-                    SavedPosition = Character.HumanoidRootPart.CFrame
-                    saveBtnComponent.Text = "Saved!"
-                    saveFrame.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
-                    wait(1)
-                    saveBtnComponent.Text = "Save Pos"
-                    saveFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    
+    -- Função para iniciar movimento contínuo
+    local function StartMovement(direction, buttonId)
+        StopMovement(buttonId) -- Para qualquer movimento anterior
+        
+        MovementConnections[buttonId] = RunService.Heartbeat:Connect(function()
+            if ChairBlock then
+                local newPosition = ChairBlock.Position + (direction * 0.5) -- Movimento mais suave
+                ChairBlock.Position = newPosition
+                
+                -- Atualizar posição do assento também
+                local seat = ChairBlock:FindFirstChild("Seat")
+                if seat then
+                    seat.Position = newPosition + Vector3.new(0, 0.75 + ChairHeight, 0)
                 end
-            end
-        )
-        
-        saveButton = saveGui
-        
-        -- Criar botão Teleport Position
-        local teleGui, teleFrame, teleBtnComponent = CreateDraggableButton("Teleport", 
-            UDim2.new(0, 80, 0, 40), 
-            UDim2.new(0, 400, 0, 200),
-            function()
-                if SavedPosition and not isTeleporting then
-                    isTeleporting = true
-                    teleBtnComponent.Text = "Flying..."
-                    teleFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 50)
-                    
-                    -- Criar efeito de voo suave até a posição salva
-                    local startPos = Character.HumanoidRootPart.CFrame
-                    local endPos = SavedPosition
-                    local distance = (startPos.Position - endPos.Position).Magnitude
-                    local flyTime = math.max(2, distance / 50) -- Velocidade ajustável
-                    
-                    local bodyVelocity = Instance.new("BodyVelocity")
-                    bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
-                    bodyVelocity.Parent = Character.HumanoidRootPart
-                    
-                    local bodyPosition = Instance.new("BodyPosition")
-                    bodyPosition.MaxForce = Vector3.new(4000, 4000, 4000)
-                    bodyPosition.Position = endPos.Position
-                    bodyPosition.Parent = Character.HumanoidRootPart
-                    
-                    -- Remover após chegar
-                    wait(flyTime)
-                    bodyVelocity:Destroy()
-                    bodyPosition:Destroy()
-                    
-                    Character.HumanoidRootPart.CFrame = SavedPosition
-                    
-                    teleBtnComponent.Text = "Teleport"
-                    teleFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-                    isTeleporting = false
-                end
-            end
-        )
-        
-        teleportButton = teleGui
-        
-    elseif not enabled then
-        if saveButton then
-            saveButton:Destroy()
-            saveButton = nil
-        end
-        if teleportButton then
-            teleportButton:Destroy()
-            teleportButton = nil
-        end
-        SavedPosition = nil
-    end
-end
-
--- Função NoClip com plataforma seguindo
-local function ToggleNoClip(enabled)
-    if enabled and not isNoClipping then
-        isNoClipping = true
-        
-        -- Criar plataforma que segue o jogador
-        followPlatform = Instance.new("Part")
-        followPlatform.Name = "FollowPlatform"
-        followPlatform.Size = Vector3.new(6, 0.5, 6)
-        followPlatform.Material = Enum.Material.ForceField
-        followPlatform.BrickColor = BrickColor.new("Bright green")
-        followPlatform.Anchored = true
-        followPlatform.CanCollide = true
-        followPlatform.Transparency = 0.3
-        followPlatform.Parent = Workspace
-        
-        -- Ativar NoClip
-        NoClipConnection = RunService.Stepped:Connect(function()
-            if Character then
-                for _, part in pairs(Character:GetChildren()) do
-                    if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                        part.CanCollide = false
-                    end
+                
+                -- Manter jogador na cadeira
+                if Humanoid.Sit then
+                    RootPart.CFrame = CFrame.new(newPosition + Vector3.new(0, 2 + ChairHeight, 0))
                 end
             end
         end)
+    end
+    
+    for i, buttonData in pairs(buttons) do
+        local Button = Instance.new("TextButton")
+        local ButtonCorner = Instance.new("UICorner")
         
-        -- Plataforma seguindo o jogador
-        FollowPlatformConnection = RunService.Heartbeat:Connect(function()
-            if Character and Character:FindFirstChild("HumanoidRootPart") and followPlatform then
-                local rootPart = Character.HumanoidRootPart
-                local targetPos = rootPart.Position - Vector3.new(0, 6, 0)
-                
-                -- Raycast para detectar o chão
-                local raycast = Workspace:Raycast(rootPart.Position, Vector3.new(0, -1000, 0))
-                if raycast then
-                    targetPos = Vector3.new(rootPart.Position.X, raycast.Position.Y - 1, rootPart.Position.Z)
-                end
-                
-                followPlatform.Position = targetPos
-                
-                -- Detectar se o jogador atravessou o chão
-                local playerY = rootPart.Position.Y
-                local platformY = followPlatform.Position.Y
-                
-                if playerY < platformY - 5 and not cloneCreated then
-                    cloneCreated = true
-                    
-                    -- Criar clone do personagem
-                    if lastClone then
-                        lastClone:Destroy()
-                    end
-                    
-                    lastClone = Instance.new("Part")
-                    lastClone.Name = "PlayerClone"
-                    lastClone.Size = Vector3.new(2, 6, 1)
-                    lastClone.Material = Enum.Material.Neon
-                    lastClone.BrickColor = BrickColor.new("Bright red")
-                    lastClone.Anchored = true
-                    lastClone.CanCollide = false
-                    lastClone.CFrame = CFrame.new(followPlatform.Position + Vector3.new(0, 4, 0))
-                    lastClone.Parent = Workspace
-                    
-                    -- Esperar 1 segundo e teleportar para o clone
-                    spawn(function()
-                        wait(1)
-                        if lastClone and Character and Character:FindFirstChild("HumanoidRootPart") then
-                            Character.HumanoidRootPart.CFrame = lastClone.CFrame
-                            lastClone:Destroy()
-                            lastClone = nil
-                            cloneCreated = false
-                        end
-                    end)
-                end
-                
-                -- Reset clone detection quando o jogador estiver acima da plataforma
-                if playerY > platformY + 2 then
-                    cloneCreated = false
-                end
+        Button.Parent = Frame
+        Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        Button.Position = buttonData.pos
+        Button.Size = UDim2.new(0, 40, 0, 30)
+        Button.Font = Enum.Font.GothamBold
+        Button.Text = buttonData.text
+        Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+        Button.TextScaled = true
+        
+        ButtonCorner.CornerRadius = UDim.new(0, 6)
+        ButtonCorner.Parent = Button
+        
+        -- Evento de pressionar (segurar)
+        Button.MouseButton1Down:Connect(function()
+            Button.BackgroundColor3 = Color3.fromRGB(100, 150, 100)
+            StartMovement(buttonData.dir, i)
+        end)
+        
+        -- Evento de soltar
+        Button.MouseButton1Up:Connect(function()
+            Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            StopMovement(i)
+        end)
+        
+        -- Hover effects
+        Button.MouseEnter:Connect(function()
+            if not MovementConnections[i] then
+                Button.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
             end
         end)
         
-    elseif not enabled and isNoClipping then
-        isNoClipping = false
+        Button.MouseLeave:Connect(function()
+            if not MovementConnections[i] then
+                Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            end
+            StopMovement(i) -- Para o movimento se sair do botão
+        end)
+    end
+    
+    -- Botões de altura
+    local UpButton = Instance.new("TextButton")
+    local UpCorner = Instance.new("UICorner")
+    local DownButton = Instance.new("TextButton")
+    local DownCorner = Instance.new("UICorner")
+    local HeightLabel = Instance.new("TextLabel")
+    
+    -- Botão para subir
+    UpButton.Parent = Frame
+    UpButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+    UpButton.Position = UDim2.new(0, 10, 1, -40)
+    UpButton.Size = UDim2.new(0, 35, 0, 30)
+    UpButton.Font = Enum.Font.GothamBold
+    UpButton.Text = "▲"
+    UpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    UpButton.TextScaled = true
+    
+    UpCorner.CornerRadius = UDim.new(0, 6)
+    UpCorner.Parent = UpButton
+    
+    -- Botão para descer
+    DownButton.Parent = Frame
+    DownButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+    DownButton.Position = UDim2.new(1, -45, 1, -40)
+    DownButton.Size = UDim2.new(0, 35, 0, 30)
+    DownButton.Font = Enum.Font.GothamBold
+    DownButton.Text = "▼"
+    DownButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    DownButton.TextScaled = true
+    
+    DownCorner.CornerRadius = UDim.new(0, 6)
+    DownCorner.Parent = DownButton
+    
+    -- Label de altura
+    HeightLabel.Parent = Frame
+    HeightLabel.BackgroundTransparency = 1
+    HeightLabel.Position = UDim2.new(0, 50, 1, -40)
+    HeightLabel.Size = UDim2.new(0, 80, 0, 30)
+    HeightLabel.Font = Enum.Font.Gotham
+    HeightLabel.Text = "Altura: 0"
+    HeightLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    HeightLabel.TextScaled = true
+    
+    -- Função para atualizar altura
+    local function UpdateHeight(increment)
+        ChairHeight = ChairHeight + increment
+        ChairHeight = math.max(-2, math.min(10, ChairHeight)) -- Limitar entre -2 e 10
         
-        -- Desativar NoClip
-        if NoClipConnection then
-            NoClipConnection:Disconnect()
-            NoClipConnection = nil
+        HeightLabel.Text = "Altura: " .. math.floor(ChairHeight * 10) / 10
+        
+        if ChairBlock then
+            local seat = ChairBlock:FindFirstChild("Seat")
+            if seat then
+                seat.Position = ChairBlock.Position + Vector3.new(0, 0.75 + ChairHeight, 0)
+            end
+            
+            -- Atualizar posição do jogador se estiver sentado
+            if Humanoid.Sit then
+                RootPart.CFrame = CFrame.new(ChairBlock.Position + Vector3.new(0, 2 + ChairHeight, 0))
+            end
+        end
+    end
+    
+    -- Eventos dos botões de altura (também seguráveis)
+    local heightUpConnection = nil
+    local heightDownConnection = nil
+    
+    -- Subir altura
+    UpButton.MouseButton1Down:Connect(function()
+        UpButton.BackgroundColor3 = Color3.fromRGB(120, 220, 120)
+        UpdateHeight(0.1)
+        
+        heightUpConnection = RunService.Heartbeat:Connect(function()
+            UpdateHeight(0.05) -- Movimento contínuo mais lento
+        end)
+    end)
+    
+    UpButton.MouseButton1Up:Connect(function()
+        UpButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+        if heightUpConnection then
+            heightUpConnection:Disconnect()
+            heightUpConnection = nil
+        end
+    end)
+    
+    UpButton.MouseLeave:Connect(function()
+        UpButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+        if heightUpConnection then
+            heightUpConnection:Disconnect()
+            heightUpConnection = nil
+        end
+    end)
+    
+    -- Descer altura
+    DownButton.MouseButton1Down:Connect(function()
+        DownButton.BackgroundColor3 = Color3.fromRGB(220, 120, 120)
+        UpdateHeight(-0.1)
+        
+        heightDownConnection = RunService.Heartbeat:Connect(function()
+            UpdateHeight(-0.05) -- Movimento contínuo mais lento
+        end)
+    end)
+    
+    DownButton.MouseButton1Up:Connect(function()
+        DownButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+        if heightDownConnection then
+            heightDownConnection:Disconnect()
+            heightDownConnection = nil
+        end
+    end)
+    
+    DownButton.MouseLeave:Connect(function()
+        DownButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+        if heightDownConnection then
+            heightDownConnection:Disconnect()
+            heightDownConnection = nil
+        end
+    end)
+    
+    return ScreenGui
+end
+
+local function ToggleChairSystem()
+    if ChairSystemEnabled then
+        ChairSystemEnabled = false
+        
+        -- Parar todas as conexões de movimento
+        for i, connection in pairs(MovementConnections) do
+            if connection then
+                connection:Disconnect()
+            end
+        end
+        MovementConnections = {}
+        ChairHeight = 0
+        
+        -- Remover cadeira e controles
+        if ChairBlock then
+            ChairBlock:Destroy()
+            ChairBlock = nil
+        end
+        if ChairControlsFrame then
+            ChairControlsFrame:Destroy()
+            ChairControlsFrame = nil
+        end
+        if ChairButton then
+            ChairButton.TextButton.Text = "Ativar Cadeira"
+            ChairButton.TextButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+        end
+    else
+        ChairSystemEnabled = true
+        ChairHeight = 0 -- Reset da altura
+        
+        -- Criar bloco da cadeira
+        ChairBlock = Instance.new("Part")
+        ChairBlock.Name = "ChairBlock"
+        ChairBlock.Parent = workspace
+        ChairBlock.Size = Vector3.new(4, 1, 4)
+        ChairBlock.Material = Enum.Material.Neon
+        ChairBlock.BrickColor = BrickColor.new("Bright blue")
+        ChairBlock.Anchored = true
+        ChairBlock.CanCollide = true
+        ChairBlock.Position = RootPart.Position - Vector3.new(0, 3, 0)
+        
+        -- Sentar no bloco
+        local Seat = Instance.new("Seat")
+        Seat.Name = "Seat"
+        Seat.Parent = ChairBlock
+        Seat.Size = Vector3.new(4, 0.5, 4)
+        Seat.Position = ChairBlock.Position + Vector3.new(0, 0.75, 0)
+        Seat.Material = Enum.Material.Fabric
+        Seat.BrickColor = BrickColor.new("Really red")
+        Seat.Anchored = true
+        
+        -- Criar controles
+        ChairControlsFrame = CreateChairControls()
+        
+        if ChairButton then
+            ChairButton.TextButton.Text = "Desativar Cadeira"
+            ChairButton.TextButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
         end
         
-        if FollowPlatformConnection then
-            FollowPlatformConnection:Disconnect()
-            FollowPlatformConnection = nil
-        end
+        -- Sentar automaticamente
+        wait(0.1)
+        Humanoid.Sit = true
+        RootPart.CFrame = CFrame.new(ChairBlock.Position + Vector3.new(0, 2, 0))
+    end
+end
+
+-- Sistema NoClip com proteção de chão
+local function ToggleNoClip()
+    if NoClipEnabled then
+        NoClipEnabled = false
         
-        -- Remover plataforma
-        if followPlatform then
-            followPlatform:Destroy()
-            followPlatform = nil
-        end
-        
-        -- Remover clone se existir
-        if lastClone then
-            lastClone:Destroy()
-            lastClone = nil
-        end
-        
-        -- Restaurar colisão
+        -- Restaurar colisão das partes do personagem
         if Character then
             for _, part in pairs(Character:GetChildren()) do
-                if part:IsA("BasePart") then
+                if part:IsA("BasePart") and part ~= RootPart then
                     part.CanCollide = true
                 end
             end
         end
         
-        cloneCreated = false
+        -- Remover bloco protetor e conexão
+        if NoClipBlock then
+            NoClipBlock:Destroy()
+            NoClipBlock = nil
+        end
+        
+        if NoClipConnection then
+            NoClipConnection:Disconnect()
+            NoClipConnection = nil
+        end
+        
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "NoClip Desativado";
+            Text = "Colisão restaurada normalmente.";
+            Duration = 3;
+        })
+    else
+        NoClipEnabled = true
+        
+        -- Criar bloco protetor invisível que segue o jogador
+        NoClipBlock = Instance.new("Part")
+        NoClipBlock.Name = "NoClipFloorProtection"
+        NoClipBlock.Parent = workspace
+        NoClipBlock.Size = Vector3.new(4, 0.5, 4)
+        NoClipBlock.Material = Enum.Material.ForceField
+        NoClipBlock.BrickColor = BrickColor.new("Bright green")
+        NoClipBlock.Transparency = 0.7
+        NoClipBlock.Anchored = true
+        NoClipBlock.CanCollide = true
+        NoClipBlock.Position = RootPart.Position - Vector3.new(0, 4, 0)
+        
+        -- Adicionar efeito visual ao bloco protetor
+        local SelectionBox = Instance.new("SelectionBox")
+        SelectionBox.Parent = NoClipBlock
+        SelectionBox.Adornee = NoClipBlock
+        SelectionBox.Color3 = Color3.fromRGB(0, 255, 0)
+        SelectionBox.LineThickness = 0.2
+        SelectionBox.Transparency = 0.3
+        
+        NoClipConnection = RunService.Heartbeat:Connect(function()
+            if not NoClipEnabled or not Character or not RootPart then return end
+            
+            -- Desativar colisão de todas as partes exceto o HumanoidRootPart
+            for _, part in pairs(Character:GetChildren()) do
+                if part:IsA("BasePart") and part ~= RootPart then
+                    part.CanCollide = false
+                end
+            end
+            
+            -- Manter RootPart sem colisão também (para atravessar paredes)
+            RootPart.CanCollide = false
+            
+            -- Atualizar posição do bloco protetor (sempre abaixo do jogador)
+            if NoClipBlock then
+                local playerPos = RootPart.Position
+                local floorY = playerPos.Y - 4
+                
+                -- Raycast para detectar o chão real
+                local raycast = workspace:Raycast(playerPos, Vector3.new(0, -20, 0))
+                if raycast then
+                    local groundY = raycast.Position.Y
+                    -- Posicionar o bloco protetor um pouco acima do chão real
+                    floorY = math.max(groundY + 0.5, playerPos.Y - 6)
+                end
+                
+                NoClipBlock.Position = Vector3.new(playerPos.X, floorY, playerPos.Z)
+                
+                -- Verificar se o jogador está muito próximo do bloco (proteção ativada)
+                local distanceToBlock = (playerPos - NoClipBlock.Position).Magnitude
+                if distanceToBlock < 5 then
+                    NoClipBlock.BrickColor = BrickColor.new("Bright red")
+                    NoClipBlock.Transparency = 0.5
+                else
+                    NoClipBlock.BrickColor = BrickColor.new("Bright green")
+                    NoClipBlock.Transparency = 0.7
+                end
+            end
+        end)
+        
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "NoClip Ativado!";
+            Text = "Atravesse paredes! Bloco protetor criado abaixo de você.";
+            Duration = 4;
+        })
+    end
+end
+local function SavePosition()
+    SavedPosition = RootPart.Position
+    game.StarterGui:SetCore("SendNotification", {
+        Title = "Posição Salva!";
+        Text = "Posição atual foi salva com sucesso.";
+        Duration = 3;
+    })
+end
+
+local function TeleportToSavedPosition()
+    if SavedPosition then
+        local targetCFrame = CFrame.new(SavedPosition)
+        
+        -- Animação de teleporte suave
+        local startPos = RootPart.Position
+        local distance = (SavedPosition - startPos).Magnitude
+        local duration = math.min(distance / 50, 3) -- Máximo 3 segundos
+        
+        local bodyPosition = Instance.new("BodyPosition")
+        bodyPosition.MaxForce = Vector3.new(4000, 4000, 4000)
+        bodyPosition.Position = SavedPosition
+        bodyPosition.Parent = RootPart
+        
+        wait(duration)
+        bodyPosition:Destroy()
+        
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "Teleporte Concluído!";
+            Text = "Você foi teleportado para a posição salva.";
+            Duration = 3;
+        })
+    else
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "Erro!";
+            Text = "Nenhuma posição foi salva ainda.";
+            Duration = 3;
+        })
     end
 end
 
--- Função para atualizar referências do personagem
-local function UpdateCharacterReferences()
-    Character = Player.Character or Player.CharacterAdded:Wait()
-    Humanoid = Character:WaitForChild("Humanoid")
-    RootPart = Character:WaitForChild("HumanoidRootPart")
-end
+-- Mostrar barra de carregamento
+ShowLoadingBar()
 
--- Reconectar quando o personagem respawnar
-Player.CharacterAdded:Connect(function(newCharacter)
-    wait(1)
-    UpdateCharacterReferences()
-    
-    -- Reativar funcionalidades se estavam ativas
-    if isFloating then
-        ToggleFloat(false)
-        ToggleFloat(true)
+-- Criar interface Rayfield
+local Window = Rayfield:CreateWindow({
+    Name = "Sistema Avançado de Movimentação",
+    LoadingTitle = "Carregando Sistema...",
+    LoadingSubtitle = "Por favor aguarde",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "MovementSystem",
+        FileName = "Config"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = "",
+        RememberJoins = false
+    },
+    KeySystem = false
+})
+
+-- Tab Principal
+local MainTab = Window:CreateTab("Main", 4483362458)
+
+-- Toggle Float
+local FloatToggle = MainTab:CreateToggle({
+    Name = "Sistema de Flutuação",
+    CurrentValue = false,
+    Flag = "FloatToggle",
+    Callback = function(Value)
+        if Value then
+            FloatButton = CreateDraggableButton("Ativar Float", Color3.fromRGB(70, 70, 70), UDim2.new(0, 50, 0, 100), ToggleFloat)
+        else
+            if FloatEnabled then
+                ToggleFloat() -- Desativar se estiver ativo
+            end
+            if FloatButton then
+                FloatButton:Destroy()
+                FloatButton = nil
+            end
+        end
     end
-    
-    if isSitting then
-        ToggleSitBlock(false)
-        ToggleSitBlock(true)
+})
+
+-- Toggle Chair System
+local ChairToggle = MainTab:CreateToggle({
+    Name = "Sistema de Cadeira Móvel",
+    CurrentValue = false,
+    Flag = "ChairToggle",
+    Callback = function(Value)
+        if Value then
+            ChairButton = CreateDraggableButton("Ativar Cadeira", Color3.fromRGB(70, 70, 70), UDim2.new(0, 50, 0, 160), ToggleChairSystem)
+        else
+            if ChairSystemEnabled then
+                ToggleChairSystem() -- Desativar se estiver ativo
+            end
+            if ChairButton then
+                ChairButton:Destroy()
+                ChairButton = nil
+            end
+        end
     end
-    
-    if isNoClipping then
-        ToggleNoClip(false)
-        ToggleNoClip(true)
+})
+
+-- Toggle NoClip System
+local NoClipToggle = MainTab:CreateToggle({
+    Name = "Sistema NoClip com Proteção",
+    CurrentValue = false,
+    Flag = "NoClipToggle",
+    Callback = function(Value)
+        if Value then
+            ToggleNoClip()
+        else
+            if NoClipEnabled then
+                ToggleNoClip() -- Desativar se estiver ativo
+            end
+        end
+    end
+})
+-- Toggle Position System
+local PositionToggle = MainTab:CreateToggle({
+    Name = "Sistema de Salvamento de Posição",
+    CurrentValue = false,
+    Flag = "PositionToggle",
+    Callback = function(Value)
+        if Value then
+            SaveButton = CreateDraggableButton("Salvar Pos", Color3.fromRGB(100, 150, 100), UDim2.new(0, 50, 0, 220), SavePosition)
+            TeleportButton = CreateDraggableButton("Teleportar", Color3.fromRGB(150, 100, 150), UDim2.new(0, 180, 0, 220), TeleportToSavedPosition)
+        else
+            if SaveButton then
+                SaveButton:Destroy()
+                SaveButton = nil
+            end
+            if TeleportButton then
+                TeleportButton:Destroy()
+                TeleportButton = nil
+            end
+        end
+    end
+})
+
+-- Seção de informações
+MainTab:CreateSection("Informações do Sistema")
+
+MainTab:CreateParagraph({
+    Title = "Como usar:",
+    Content = "1. Flutuação: Ative o toggle e use o botão que aparece\n2. Cadeira: Ative o toggle, segure os botões para mover, use ▲▼ para altura\n3. NoClip: Atravesse paredes com proteção de chão automática\n4. Posições: Salve e teleporte para posições específicas"
+})
+
+-- Notificação de inicialização
+Rayfield:Notify({
+    Title = "Sistema Carregado!",
+    Content = "Todos os recursos foram carregados com sucesso.",
+    Duration = 5,
+    Image = 4483362458
+})
+
+-- Limpeza ao sair
+game.Players.PlayerRemoving:Connect(function(player)
+    if player == LocalPlayer then
+        -- Limpar todas as conexões e objetos
+        if FloatConnection then FloatConnection:Disconnect() end
+        if ChairConnection then ChairConnection:Disconnect() end
+        if TeleportConnection then TeleportConnection:Disconnect() end
+        if NoClipConnection then NoClipConnection:Disconnect() end
+        
+        -- Limpar conexões de movimento
+        for i, connection in pairs(MovementConnections) do
+            if connection then connection:Disconnect() end
+        end
     end
 end)
-
--- Criar os toggles na GUI
-local FloatToggle = MainTab:CreateToggle({
-   Name = "Float Mode",
-   CurrentValue = false,
-   Flag = "FloatToggle",
-   Callback = function(Value)
-       ToggleFloat(Value)
-   end,
-})
-
-local SitBlockToggle = MainTab:CreateToggle({
-   Name = "Sit Block",
-   CurrentValue = false,
-   Flag = "SitBlockToggle", 
-   Callback = function(Value)
-       ToggleSitBlock(Value)
-   end,
-})
-
-local SaveTeleportToggle = MainTab:CreateToggle({
-   Name = "Save/Teleport Position",
-   CurrentValue = false,
-   Flag = "SaveTeleportToggle",
-   Callback = function(Value)
-       ToggleSaveTeleport(Value)
-   end,
-})
-
-local NoClipToggle = MainTab:CreateToggle({
-   Name = "NoClip + Following Platform",
-   CurrentValue = false,
-   Flag = "NoClipToggle",
-   Callback = function(Value)
-       ToggleNoClip(Value)
-   end,
-})
-
--- Slider para ajustar altura do float
-local FloatHeightSlider = MainTab:CreateSlider({
-   Name = "Float Height",
-   Range = {5, 50},
-   Increment = 1,
-   CurrentValue = 16,
-   Flag = "FloatHeight",
-   Callback = function(Value)
-       floatHeight = Value
-   end,
-})
-
--- Slider para velocidade do bloco
-local BlockSpeedSlider = MainTab:CreateSlider({
-   Name = "Block Move Speed",
-   Range = {5, 50},
-   Increment = 1,
-   CurrentValue = 16,
-   Flag = "BlockSpeed", 
-   Callback = function(Value)
-       blockMoveSpeed = Value
-   end,
-})
-
--- Label informativo
-local InfoLabel = MainTab:CreateLabel("Script criado com todas as funcionalidades solicitadas!")
-
--- Botão para destruir todas as GUIs
-local DestroyAllButton = MainTab:CreateButton({
-   Name = "Destroy All Floating Buttons",
-   Callback = function()
-       for _, gui in pairs(PlayerGui:GetChildren()) do
-           if gui.Name:find("Gui") then
-               gui:Destroy()
-           end
-       end
-       
-       -- Reset de todas as variáveis
-       if sitBlock then sitBlock:Destroy() end
-       if followPlatform then followPlatform:Destroy() end
-       if lastClone then lastClone:Destroy() end
-       
-       -- Desconectar todas as conexões
-       if FloatConnection then FloatConnection:Disconnect() end
-       if NoClipConnection then NoClipConnection:Disconnect() end
-       if FollowPlatformConnection then FollowPlatformConnection:Disconnect() end
-       
-       -- Reset flags
-       isFloating = false
-       isSitting = false
-       isNoClipping = false
-       SavedPosition = nil
-   end,
-})
-
-print("Script Rayfield carregado com sucesso!")
-print("Todas as funcionalidades estão funcionando:")
-print("- Float Mode com botão flutuante")
-print("- Sit Block com controles direcionais")
-print("- Save/Teleport Position com voo suave")
-print("- NoClip com plataforma que segue e sistema de clone")
-print("Desfrute do script!")
